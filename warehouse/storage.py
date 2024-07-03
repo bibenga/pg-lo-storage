@@ -63,7 +63,7 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         # d = FileData.objects.get(name=name)
         if "b" not in mode:
             raise ValueError("text mode unsuported")
-        loid = int(name)
+        loid = int(pathlib.Path(name).stem)
         return PostgresqlLargeObjectFile(name, loid, mode, self)
 
     def _save(self, name, content):
