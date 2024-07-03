@@ -1,0 +1,41 @@
+[project]
+name = "warehouse-py"
+version = "0.0.1"
+authors = [
+  { name="Space Void", email="234253453453@43234234234234.com" },
+]
+description = "Lightweight scheduler and worker for Django using a database backend"
+license = {text = "MIT"}
+readme = "README.md"
+keywords = ["django", "distributed", "multiprocessing", "queue", "scheduler"]
+classifiers = [
+    'Environment :: Web Environment',
+    'Framework :: Django',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: MIT License',
+    "Operating System :: OS Independent",
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.12',
+    'Topic :: Internet :: WWW/HTTP',
+    'Topic :: System :: Distributed Computing',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+]
+
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5,<6",
+    "croniter>=2,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/bibenga/warehouse-py"
+Issues = "https://github.com/bibenga/warehouse-py/issues"
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["warehouse"]
+
