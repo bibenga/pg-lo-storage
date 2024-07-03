@@ -47,7 +47,7 @@ class TestWorker:
                 print(row)
 
                 # work like with file
-                cursor.execute("select lo_open(%s, %s)", [loid, MODE_READ])
+                cursor.execute("select lo_open(%s, %s)", [loid, MODE_READWRITE])
                 row = cursor.fetchone()
                 print(row)
                 fd = row[0]
@@ -63,6 +63,10 @@ class TestWorker:
                 row = cursor.fetchone()
                 print(row)
                 cursor.execute("select loread(%s, 3)", [fd])
+                row = cursor.fetchone()
+                print(row)
+
+                cursor.execute("select lo_truncate64(%s, 2)", [fd])
                 row = cursor.fetchone()
                 print(row)
 
