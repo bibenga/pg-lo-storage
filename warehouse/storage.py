@@ -69,24 +69,10 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
     def _save(self, name, content):
         # loid = int(name)
         with connection.cursor() as cursor:
-            # cursor.execute("select count(loid) from pg_largeobject where loid=%s limit 1", [loid])
-            # row = cursor.fetchone()
-            # if row[0] >= 1:
-            #     cursor.execute("select lo_create(0) as loid")
-            #     row = cursor.fetchone()
-            #     loid = row[0]
             cursor.execute("select lo_create(0) as loid")
             row = cursor.fetchone()
             loid = row[0]
 
-            # data = content.read()
-            # cursor.execute("select lo_put(%s, 0, %s)", [loid, data])
-
-            # for chunk in content.chunks():
-            #     if _file is None:
-            #         mode = "wb" if isinstance(chunk, bytes) else "wt"
-            #         _file = os.fdopen(fd, mode)
-            #     _file.write(chunk)
             cursor.execute("select lo_open(%s, %s)", [loid, MODE_WRITE])
             row = cursor.fetchone()
             fd = row[0]
@@ -124,16 +110,13 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         loid = int(pathlib.Path(name).stem)
         with connection.cursor() as cursor:
             cursor.execute("select lo_open(%s, %s)", [loid, MODE_READ])
-            row = cursor.fetchone()
-            fd = row[0]
+            fd = cursor.fetchone()[0]
 
             cursor.execute("select lo_lseek64(%s, 0, %s)", [fd, SEEK_END])
             cursor.execute("select lo_tell64(%s)", [fd])
-            row = cursor.fetchone()
-            size = row[0]
+            size = cursor.fetchone()[0]
 
             cursor.execute("select lo_close(%s)", [fd])
-            row = cursor.fetchone()
 
             return size
 
@@ -149,7 +132,7 @@ class PostgresqlLargeObjectFile:
         self._loid = loid
         self._storage = storage
         self._file = None
-        self._cursor = connection.cursor()
+        # self._cursor = connection.cursor()
 
     def _get_file(self):
         if self._file is None:
@@ -204,5 +187,5 @@ class PostgresqlLargeObjectFile:
         #     self._storage.disconnect()
         if self._file:
             self._file.close()
-        if self._cursor:
-            self._cursor.close()
+        # if self._cursor:
+        #     self._cursor.close()
