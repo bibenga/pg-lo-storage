@@ -1,6 +1,6 @@
 # warehouse-py
 
-Use PostgreSQL large objects for file storage. The main benefit is that it works with *transaction*.
+Use PostgreSQL large objects for file storage. The main benefit is that it works with **transaction**.
 The PostgresqlLargeObjectStorage use a template `<loid>.<original_extension>` for field (where loid is a large object id).
 The PostgresqlLargeObjectFile is a file-like object that translates calls to SQL.
 
