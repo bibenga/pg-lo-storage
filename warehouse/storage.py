@@ -249,17 +249,17 @@ class PostgresqlLargeObjectFile2(io.IOBase):
 
     def close(self) -> None:
         if not self.closed:
-            self._cursor.execute("select lo_close(%s)", [self._fd])
-            self._cursor.close()
-            self._cursor = None
-            self._fd = None
+            cursor, self._cursor = self._cursor, None
+            fd, self._fd = self._fd, None
+            cursor.execute("select lo_close(%s)", [fd])
+            cursor.close()
 
     @property
     def closed(self) -> bool:
         return self._cursor is None
 
     def fileno(self):
-        raise NotImplementedError()
+        return self._fd
 
     def flush(self) -> None:
         pass
@@ -278,7 +278,7 @@ class PostgresqlLargeObjectFile2(io.IOBase):
     def readable(self) -> bool:
         return "r" in self._mode
 
-    def read(self, size=-1) -> bytes:
+    def read(self, size=-1) -> bytes | None:
         if size is None or size < 0:
             return self.readall()
         self._cursor.execute("select loread(%s, %s)", [self._fd, size])
@@ -307,12 +307,29 @@ class PostgresqlLargeObjectFile2(io.IOBase):
             if len(chunk) < self.CHUNK_SIZE:
                 break
 
-    def readline(self, size=-1) -> bytes:
-        # terminator = b'\n'
-        # data = b''
-        # pos = self.tell()
-        # while True:
-        raise NotImplementedError()
+    def readline(self, size=-1) -> bytes | None:
+        if size <= 0:
+            return None
+        pos = self.tell()
+        line = b''
+        while True:
+            chunk = self.read(512)
+            if not chunk:
+                break
+            try:
+                i = chunk.index(b'\n')
+                line += chunk[0:i]
+                break
+            except ValueError:
+                line += chunk
+                if len(line) >= size:
+                    break
+        if not line:
+            return None
+        if len(line) > size:
+            line = line[0:size]
+        self.seek(pos + len(line), os.SEEK_SET)
+        return line
 
     def readlines(self, hint=-1):
         lines = []
