@@ -4,7 +4,7 @@ from django.db import transaction
 
 
 @pytest.mark.django_db(transaction=True)
-class TestWorker:
+class TestLargeObject:
     def test_lo(self, mocker):
         # https://www.postgresql.org/docs/16/lo-funcs.html
         # https://www.postgresql.org/docs/current/lo-interfaces.html
@@ -62,7 +62,7 @@ class TestWorker:
                 cursor.execute("select lo_lseek64(%s, 0, %s)", [fd, SEEK_SET])
                 row = cursor.fetchone()
                 print(row)
-                cursor.execute("select loread(%s, 3)", [fd])
+                cursor.execute("select loread(%s, 0)", [fd])
                 row = cursor.fetchone()
                 print(row)
 

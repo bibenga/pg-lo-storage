@@ -1,12 +1,18 @@
+import io
+import os
 import pathlib
 from tempfile import SpooledTemporaryFile
+from types import TracebackType
+from typing import Iterable, Iterator, Self
 from urllib.parse import urljoin
+import warnings
 
 from django.conf import settings
 from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
+from django.core.files.utils import FileProxyMixin
 from django.core.signals import setting_changed
-from django.db import connection
+from django.db import ProgrammingError, connection, transaction
 from django.utils.deconstruct import deconstructible
 from django.utils.functional import LazyObject
 
@@ -15,9 +21,9 @@ MODE_WRITE = 0x20000
 MODE_READ = 0x40000
 MODE_READWRITE = MODE_READ | MODE_WRITE
 
-SEEK_SET = 0
-SEEK_CUR = 1
-SEEK_END = 2
+SEEK_SET = io.SEEK_SET  # 0
+SEEK_CUR = io.SEEK_CUR  # 1
+SEEK_END = io.SEEK_END  # 2
 
 # select loid, count(pageno) from pg_largeobject group by loid
 
@@ -59,66 +65,59 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
     def get_available_name(self, filename, max_length=None):
         return filename
 
-    def _open(self, name, mode="rb"):
-        # d = FileData.objects.get(name=name)
-        if "b" not in mode:
-            raise ValueError("text mode unsuported")
+    def _get_loid(self, name):
         loid = int(pathlib.Path(name).stem)
-        return PostgresqlLargeObjectFile(name, loid, mode, self)
+        return loid
+
+    def _open(self, name, mode="rb"):
+        if "b" not in mode:
+            raise ValueError("the text mode is unsuported")
+        loid = self._get_loid(name)
+        # return PostgresqlLargeObjectFile(name, loid, mode, self)
+        return PostgresqlLargeObjectFile2(self, loid, mode)
 
     def _save(self, name, content):
-        # loid = int(name)
-        with connection.cursor() as cursor:
-            cursor.execute("select lo_create(0) as loid")
-            row = cursor.fetchone()
-            loid = row[0]
-
-            cursor.execute("select lo_open(%s, %s)", [loid, MODE_WRITE])
-            row = cursor.fetchone()
-            fd = row[0]
+        # with connection.cursor() as cursor:
+        #     cursor.execute("select lo_create(0) as loid")
+        #     loid = cursor.fetchone()[0]
+        #     cursor.execute("select lo_open(%s, %s)", [loid, MODE_WRITE])
+        #     row = cursor.fetchone()
+        #     fd = row[0]
+        #     for chunk in content.chunks():
+        #         cursor.execute("select lowrite(%s, %s)", [fd, chunk])
+        #     cursor.execute("select lo_close(%s)", [fd])
+        with PostgresqlLargeObjectFile2(self, 0, "wb") as f:
             for chunk in content.chunks():
-                cursor.execute("select lowrite(%s, %s)", [fd, chunk])
-            cursor.execute("select lo_close(%s)", [fd])
+                f.write(chunk)
+            loid = f.loid
+
         suffixes = pathlib.Path(name).suffixes
         suffixes = "".join(suffixes)
         return f"{loid}{suffixes}"
 
     def delete(self, name):
         # loid = int(name)
-        loid = int(pathlib.Path(name).stem)
-        with connection.cursor() as cursor:
-            cursor.execute("select lo_unlink(%s)", [int(loid)])
+        loid = self._get_loid(name)
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("select lo_unlink(%s)", [int(loid)])
+        except ProgrammingError as err:
+            # django.db.utils.ProgrammingError: large object 38450 does not exist
+            pass
 
     def exists(self, name):
-        # loid = int(name)
-        try:
-            loid = int(pathlib.Path(name).stem)
-        except (ValueError, TypeError):
-            return False
-        with connection.cursor() as cursor:
-            cursor.execute("select count(loid) from pg_largeobject where loid=%s limit 1", [loid])
-            row = cursor.fetchone()
-            return row[0] >= 1
+        with transaction.atomic():
+            with self._open(name):
+                return True
+        return False
 
     def listdir(self, path):
-        raise NotImplementedError(
-            "subclasses of Storage must provide a listdir() method"
-        )
+        raise NotImplementedError()
 
     def size(self, name):
-        # loid = int(name)
-        loid = int(pathlib.Path(name).stem)
-        with connection.cursor() as cursor:
-            cursor.execute("select lo_open(%s, %s)", [loid, MODE_READ])
-            fd = cursor.fetchone()[0]
-
-            cursor.execute("select lo_lseek64(%s, 0, %s)", [fd, SEEK_END])
-            cursor.execute("select lo_tell64(%s)", [fd])
-            size = cursor.fetchone()[0]
-
-            cursor.execute("select lo_close(%s)", [fd])
-
-            return size
+        with self._open(name) as f:
+            return f.size
 
     def url(self, name):
         if self._base_url is None:
@@ -126,11 +125,12 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         return urljoin(self._base_url, name).replace("\\", "/")
 
 
-class PostgresqlLargeObjectFile:
+class PostgresqlLargeObjectFile(FileProxyMixin):
+    # https://docs.python.org/3/library/io.html#class-hierarchy
     def __init__(self, name: str, loid: int, mode: str, storage: PostgresqlLargeObjectStorage) -> None:
-        self._name = name
         self._loid = loid
         self._storage = storage
+        self._mode = mode
         self._file = None
         # self._cursor = connection.cursor()
 
@@ -156,36 +156,208 @@ class PostgresqlLargeObjectFile:
             self._size = self._storage.size(self.name)
         return self._size
 
-    def __iter__(self):
-        return self.file.__iter__()
 
-    # def readlines(self):
-    #     if not self._is_read:
-    #         self._storage._start_connection()
-    #         self.file = self._storage._read(self.name)
-    #         self._is_read = True
-    #     return self.file.readlines()
+class PostgresqlLargeObjectFile2(io.IOBase):
+    # https://docs.python.org/3/library/io.html#class-hierarchy
+    CHUNK_SIZE = 65536
 
-    # def read(self, num_bytes=None):
-    #     if not self._is_read:
-    #         self._storage._start_connection()
-    #         self.file = self._storage._read(self.name)
-    #         self._is_read = True
-    #     return self.file.read(num_bytes)
+    def __init__(self, storage: PostgresqlLargeObjectStorage, loid: int, mode: str = "rb", name: str = '') -> None:
+        self._storage = storage
+        self._loid = loid
+        self._mode = mode
 
-    # def write(self, content):
-    #     if "w" not in self._mode:
-    #         raise AttributeError("File was opened for read-only access.")
-    #     self.file = io.BytesIO(content)
-    #     self._is_dirty = True
-    #     self._is_read = True
+        if "b" not in mode:
+            raise ValueError("the text mode is unsuported")
+        if "r" in mode and "w" in mode:
+            mode = MODE_READWRITE
+        elif "r" in mode:
+            mode = MODE_READ
+        elif "w" in mode:
+            mode = MODE_WRITE
+        else:
+            raise ValueError(f"the mode '{mode}' is invalid")
 
-    def close(self):
-        # if self._is_dirty:
-        #     self._storage._start_connection()
-        #     self._storage._put_file(self.name, self)
-        #     self._storage.disconnect()
-        if self._file:
-            self._file.close()
-        # if self._cursor:
-        #     self._cursor.close()
+        self._cursor = connection.cursor()
+        if self._loid == 0:
+            self._cursor.execute("select lo_create(0) as loid")
+            self._loid = self._cursor.fetchone()[0]
+        self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
+        self._fd = self._cursor.fetchone()[0]
+        self._name = name or str(self._loid)
+        pass
+
+    def __str__(self) -> str:
+        return f"<PostgresqlLargeObjectFile: {self._loid}>"
+
+    @property
+    def loid(self) -> int:
+        return self._loid
+
+    @property
+    def size(self) -> int:
+        pos = self.tell
+        self.seek(0, os.SEEK_END)
+        size = self.tell()
+        self.seek(pos, os.SEEK_SET)
+        # if not hasattr(self, "_size"):
+        #     self._size = self._storage.size(self.name)
+        # return self._size
+        return size
+
+    # Context management protocol
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
+        self.close()
+
+    # file protocol
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __next__(self) -> bytes:
+        data = self.read(self.CHUNK_SIZE)
+        if not data:
+            raise StopIteration
+        return data
+
+    def __del__(self) -> None:
+        if not self.closed:
+            warnings.warn(
+                "Unclosed file {!r}".format(self),
+                ResourceWarning,
+                stacklevel=2,
+                source=self
+            )
+            self.close()
+
+    def open(self, mode=None, *args, **kwargs) -> Self:
+        if not self.closed:
+            self.close()
+
+        if "r" in mode and "w" in mode:
+            mode = MODE_READWRITE
+        elif "r" in mode:
+            mode = MODE_READ
+        elif "w" in mode:
+            mode = MODE_WRITE
+        else:
+            raise ValueError(f"the mode '{mode}' is invalid")
+        self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
+        self._fd = self._cursor.fetchone()[0]
+        return self
+
+    def close(self) -> None:
+        if not self.closed:
+            self._cursor.execute("select lo_close(%s)", [self._fd])
+            self._cursor.close()
+            self._cursor = None
+            self._fd = None
+
+    @property
+    def closed(self) -> bool:
+        return self._cursor is None
+
+    def fileno(self):
+        raise NotImplementedError()
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def readable(self) -> bool:
+        return "r" in self._mode
+
+    def read(self, size=-1) -> bytes:
+        if size is None or size < 0:
+            return self.readall()
+        self._cursor.execute("select loread(%s, %s)", [self._fd, size])
+        data = self._cursor.fetchone()[0]
+        if not data:
+            return None
+        return data
+
+    def readall(self) -> bytes | None:
+        data = b''
+        while True:
+            chunk = self.read(self.CHUNK_SIZE)
+            if not chunk:
+                break
+            data += chunk
+            if len(chunk) < self.CHUNK_SIZE:
+                break
+        return data
+
+    def readinto(self, b) -> None:
+        while True:
+            chunk = self.read(self.CHUNK_SIZE)
+            if not chunk:
+                break
+            b.write(chunk)
+            if len(chunk) < self.CHUNK_SIZE:
+                break
+
+    def readline(self, size=-1) -> bytes:
+        # terminator = b'\n'
+        # data = b''
+        # pos = self.tell()
+        # while True:
+        raise NotImplementedError()
+
+    def readlines(self, hint=-1):
+        lines = []
+        while True:
+            line = self.readline()
+            if not line:
+                break
+            lines.append(line)
+            if hint is not None and hint > 0 and len(lines) == hint:
+                break
+        return lines
+
+    def seekable(self):
+        return True
+
+    def seek(self, offset, whence=os.SEEK_SET) -> int:
+        if whence == os.SEEK_SET:
+            whence = SEEK_SET
+        elif whence == os.SEEK_CUR:
+            whence = SEEK_CUR
+        elif whence == os.SEEK_END:
+            whence = SEEK_END
+        else:
+            raise ValueError("the whence is invalid")
+        self._cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
+        return self.tell()
+
+    def tell(self):
+        self._cursor.execute("select lo_tell64(%s)", [self._fd])
+        pos = self._cursor.fetchone()[0]
+        return pos
+
+    def truncate(self, size=None):
+        if size is None:
+            size = self.tell()
+        self._cursor.execute("select lo_truncate64(%s, %s)", [self._fd, size])
+        return size
+
+    def writable(self) -> bool:
+        return "w" in self._mode
+
+    def write(self, b) -> int | None:
+        self._cursor.execute("select lowrite(%s, %s)", [self._fd, b])
+        return len(b)
+
+    def writelines(self, iterable: Iterable) -> None:
+        for s in iterable:
+            self.write(s)
