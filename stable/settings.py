@@ -111,7 +111,12 @@ DATABASES = {
         "TIME_ZONE": "UTC"
     }
 }
-
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "cache_warehouse",
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -136,7 +141,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
-MEDIA_URL = "media/"
+MEDIA_URL = "cached-media/"
+# MEDIA_URL = "media/"
 MEDIA_ROOT= ".django-storage/"
 
 # Default primary key field type
