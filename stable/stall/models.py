@@ -22,6 +22,7 @@ def user_file_initialized(sender, instance: UserFile, **kwargs):
 
 @receiver(post_save, sender=UserFile)
 def user_file_saved(sender, instance: UserFile, created: bool, **kwargs):
+    # this is safe if transaction has been started
     if not created and hasattr(instance, '_lo_prev_state'):
         state = instance._lo_prev_state
         if state.get('file0'):
@@ -32,6 +33,7 @@ def user_file_saved(sender, instance: UserFile, created: bool, **kwargs):
 
 @receiver(post_delete, sender=UserFile)
 def user_file_deleted(sender, instance: UserFile, **kwargs):
+    # this is safe if transaction has been started
     if instance.file0:
         instance.file0.storage.delete(instance.file0.name)
     if instance.file1:

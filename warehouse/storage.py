@@ -1,16 +1,14 @@
 import io
 import os
 import pathlib
-from tempfile import SpooledTemporaryFile
+import warnings
 from types import TracebackType
 from typing import Iterable, Iterator, Self
 from urllib.parse import urljoin
-import warnings
 
 from django.conf import settings
 from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
-from django.core.files.utils import FileProxyMixin
 from django.core.signals import setting_changed
 from django.db import ProgrammingError, connection, transaction
 from django.utils.deconstruct import deconstructible
