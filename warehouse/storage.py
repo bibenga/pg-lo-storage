@@ -74,7 +74,7 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
             raise ValueError("the text mode is unsuported")
         loid = self._get_loid(name)
         # return PostgresqlLargeObjectFile(name, loid, mode, self)
-        return PostgresqlLargeObjectFile2(self, loid, mode)
+        return PostgresqlLargeObjectFile(self, loid, mode)
 
     def _save(self, name, content):
         # with connection.cursor() as cursor:
@@ -86,7 +86,7 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         #     for chunk in content.chunks():
         #         cursor.execute("select lowrite(%s, %s)", [fd, chunk])
         #     cursor.execute("select lo_close(%s)", [fd])
-        with PostgresqlLargeObjectFile2(self, 0, "wb") as f:
+        with PostgresqlLargeObjectFile(self, 0, "wb") as f:
             for chunk in content.chunks():
                 f.write(chunk)
             loid = f.loid
@@ -125,39 +125,7 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         return urljoin(self._base_url, name).replace("\\", "/")
 
 
-class PostgresqlLargeObjectFile(FileProxyMixin):
-    # https://docs.python.org/3/library/io.html#class-hierarchy
-    def __init__(self, name: str, loid: int, mode: str, storage: PostgresqlLargeObjectStorage) -> None:
-        self._loid = loid
-        self._storage = storage
-        self._mode = mode
-        self._file = None
-        # self._cursor = connection.cursor()
-
-    def _get_file(self):
-        if self._file is None:
-            self._file = SpooledTemporaryFile()
-            with connection.cursor() as cursor:
-                cursor.execute("select lo_get(%s)", [self._loid])
-                row = cursor.fetchone()
-                data = row[0]
-                self._file.write(data)
-            self._file.seek(0)
-        return self._file
-
-    def _set_file(self, value):
-        self._file = value
-
-    file = property(_get_file, _set_file)
-
-    @property
-    def size(self):
-        if not hasattr(self, "_size"):
-            self._size = self._storage.size(self.name)
-        return self._size
-
-
-class PostgresqlLargeObjectFile2(io.IOBase):
+class PostgresqlLargeObjectFile(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
 
@@ -195,13 +163,10 @@ class PostgresqlLargeObjectFile2(io.IOBase):
 
     @property
     def size(self) -> int:
-        pos = self.tell
+        pos = self.tell()
         self.seek(0, os.SEEK_END)
         size = self.tell()
         self.seek(pos, os.SEEK_SET)
-        # if not hasattr(self, "_size"):
-        #     self._size = self._storage.size(self.name)
-        # return self._size
         return size
 
     # Context management protocol
@@ -308,8 +273,6 @@ class PostgresqlLargeObjectFile2(io.IOBase):
                 break
 
     def readline(self, size=-1) -> bytes | None:
-        if size <= 0:
-            return None
         pos = self.tell()
         line = b''
         while True:
@@ -318,7 +281,7 @@ class PostgresqlLargeObjectFile2(io.IOBase):
                 break
             try:
                 i = chunk.index(b'\n')
-                line += chunk[0:i]
+                line += chunk[0: i + 1]
                 break
             except ValueError:
                 line += chunk
@@ -326,7 +289,7 @@ class PostgresqlLargeObjectFile2(io.IOBase):
                     break
         if not line:
             return None
-        if len(line) > size:
+        if size > 0 and len(line) > size:
             line = line[0:size]
         self.seek(pos + len(line), os.SEEK_SET)
         return line
