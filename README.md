@@ -1,12 +1,14 @@
 # warehouse-py
 
-Use PostgreSQL large objects for file storage.
-The delete operation is safe because large objects also work with transactions.
+Use PostgreSQL large objects for file storage. The main benefit is that it works with *transaction*.
+The PostgresqlLargeObjectStorage use a template `<loid>.<original_extension>` for field (where loid is a large object id).
+The PostgresqlLargeObjectFile is a file-like object that translates calls to SQL.
 
-The file names always use the template - `<loid>.<original_extension>`.
-
-# https://www.postgresql.org/docs/16/lo-funcs.html
-# https://www.postgresql.org/docs/current/lo-interfaces.html
+Some links:
+* https://docs.djangoproject.com/en/5.0/ref/files/storage/
+* https://docs.python.org/3/library/io.html
+* https://www.postgresql.org/docs/16/lo-funcs.html
+* https://www.postgresql.org/docs/current/lo-interfaces.html
 
 ```python
 from django.db import models
@@ -31,6 +33,7 @@ def user_file_initialized(sender, instance: SomeModel, **kwargs):
 
 @receiver(post_save, sender=SomeModel)
 def user_file_saved(sender, instance: SomeModel, created: bool, **kwargs):
+    # this is safe because large objects work with transaction
     if not created and hasattr(instance, '_lo_prev_state'):
         state = instance._lo_prev_state
         if state.get('data'):
@@ -48,13 +51,10 @@ For serve files you can use example code:
 ```python
 import mimetypes
 from tempfile import SpooledTemporaryFile
-
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import FileResponse, HttpRequest, HttpResponse
-
 from warehouse.storage import postgresql_large_object_storage
-
 
 @login_required
 def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
