@@ -16,12 +16,37 @@ class PostgresqlLargeObjectFileDescriptor(FileDescriptor):
 
 
 class PostgresqlLargeObjectFileField(models.FileField):
-    descriptor_class = PostgresqlLargeObjectFileDescriptor
+    # descriptor_class = PostgresqlLargeObjectFileDescriptor
 
-    def __init__(self, verbose_name=None, name=None, storage=None, **kwargs) -> None:
+    def __init__(
+        self, verbose_name=None, name=None, upload_to="", storage=None, **kwargs
+    ):
         super().__init__(
             verbose_name=verbose_name,
             name=name,
+            upload_to=upload_to,
+            storage=storage or postgresql_large_object_storage,
+            **kwargs
+        )
+
+
+class PostgresqlLargeObjectImageField(models.ImageField):
+    # descriptor_class = PostgresqlLargeObjectFileDescriptor
+
+    def __init__(
+        self,
+        verbose_name=None,
+        name=None,
+        width_field=None,
+        height_field=None,
+        storage=None,
+        **kwargs,
+    ):
+        super().__init__(
+            verbose_name=verbose_name,
+            name=name,
+            width_field=width_field,
+            height_field=height_field,
             storage=storage or postgresql_large_object_storage,
             **kwargs
         )
