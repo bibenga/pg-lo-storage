@@ -188,13 +188,40 @@ class PostgresqlLargeObjectFile(io.IOBase):
             cursor.close()
 
     def __iter__(self) -> Iterator[bytes]:
-        return self
+        pos = self.tell()
+        buf = None
+        chunk_len = 0
+        while True:
+            if chunk_len > 0:
+                pos += chunk_len
+                self.seek(pos)
+            chunk = self.read(2)
+            if not chunk:
+                break
+            chunk_len = len(chunk)
+            if buf:
+                buf += chunk
+            else:
+                buf = chunk
 
-    def __next__(self) -> bytes:
-        data = self.read(self.CHUNK_SIZE)
-        if not data:
-            raise StopIteration
-        return data
+            s = 0
+            while True:
+                try:
+                    i = buf.index(b"\n", s)
+                    d = buf[s: i + 1]
+                    self.seek(len(d), os.SEEK_CUR)
+                    yield d
+                    s = i + 1
+                    if s >= len(buf):
+                        buf = None
+                        break
+                except ValueError:
+                    if s > 0:
+                        buf = buf[s:]
+                    break
+        if buf:
+            self.seek(len(buf), os.SEEK_CUR)
+            yield buf
 
     def __del__(self) -> None:
         if not self.closed:
@@ -283,10 +310,7 @@ class PostgresqlLargeObjectFile(io.IOBase):
 
     def readlines(self, hint=-1):
         lines = []
-        while True:
-            line = self.readline()
-            if not line:
-                break
+        for line in self:
             lines.append(line)
             if hint is not None and hint > 0 and len(lines) == hint:
                 break

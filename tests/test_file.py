@@ -5,15 +5,6 @@ from warehouse.storage import PostgresqlLargeObjectStorage, PostgresqlLargeObjec
 
 
 @pytest.mark.django_db(transaction=True)
-class TestPostgresqlLargeObjectStorage:
-
-    @pytest.fixture
-    def storage(self) -> PostgresqlLargeObjectStorage:
-        storage = PostgresqlLargeObjectStorage()
-        return storage
-
-
-@pytest.mark.django_db(transaction=True)
 class TestPostgresqlLargeObjectFile:
     def test_create_and_write(self):
         with transaction.atomic():
@@ -22,7 +13,7 @@ class TestPostgresqlLargeObjectFile:
                 assert f.loid is not None
 
             with transaction.get_connection().cursor() as cursor:
-                cursor.execute("select count(loid) from pg_largeobject where loid=%s",[f.loid])
+                cursor.execute("select count(loid) from pg_largeobject where loid=%s", [f.loid])
                 assert cursor.fetchone()[0] == 1
 
     def test_write_and_read(self):
@@ -58,6 +49,20 @@ class TestPostgresqlLargeObjectFile:
                 assert w.loid is not None
                 assert w.size == 6
 
+    def test_readline(self):
+        with transaction.atomic():
+            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+                w.write(b'abcd\nef')
+                assert w.loid is not None
+
+            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+                assert r.readline(3) == b'abc'
+                assert r.tell() == 3
+
+                r.seek(0)
+                assert r.readline() == b'abcd\n'
+                assert r.tell() == 5
+
     def test_readlines(self):
         with transaction.atomic():
             with PostgresqlLargeObjectFile(None, 0, "wb") as w:
@@ -65,9 +70,28 @@ class TestPostgresqlLargeObjectFile:
                 assert w.loid is not None
 
             with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
-                assert r.tell() == 0
-                assert r.readline() == b'ab\n'
-                assert r.tell() == 3
-                assert r.readline() == b'cd\n'
+                lines = r.readlines()
+                assert lines == [b'ab\n', b'cd\n']
                 assert r.tell() == 6
-                assert r.readline() is None
+
+    def test_iter(self):
+        with transaction.atomic():
+            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+                w.write(b'ab\ncd\ne')
+                assert w.loid is not None
+
+            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+                assert next(r) == b'ab\n'
+                assert r.tell() == 3
+                assert next(r) == b'cd\n'
+                assert r.tell() == 6
+                assert next(r) == b'e'
+                assert r.tell() == 7
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPostgresqlLargeObjectStorage:
+    @pytest.fixture
+    def storage(self) -> PostgresqlLargeObjectStorage:
+        storage = PostgresqlLargeObjectStorage()
+        return storage
