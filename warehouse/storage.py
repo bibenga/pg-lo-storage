@@ -72,23 +72,16 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
             raise ValueError("the text mode is unsuported")
         loid = self._get_loid(name)
         # return PostgresqlLargeObjectFile(name, loid, mode, self)
-        return PostgresqlLargeObjectFile(self, loid, mode)
+        f = PostgresqlLargeObjectFile(self, loid, mode)
+        if "t" in mode:
+            f = io.TextIOWrapper(f)
+        return f
 
     def _save(self, name, content):
-        # with connection.cursor() as cursor:
-        #     cursor.execute("select lo_create(0) as loid")
-        #     loid = cursor.fetchone()[0]
-        #     cursor.execute("select lo_open(%s, %s)", [loid, MODE_WRITE])
-        #     row = cursor.fetchone()
-        #     fd = row[0]
-        #     for chunk in content.chunks():
-        #         cursor.execute("select lowrite(%s, %s)", [fd, chunk])
-        #     cursor.execute("select lo_close(%s)", [fd])
         with PostgresqlLargeObjectFile(self, 0, "wb") as f:
             for chunk in content.chunks():
                 f.write(chunk)
             loid = f.loid
-
         suffixes = pathlib.Path(name).suffixes
         suffixes = "".join(suffixes)
         return f"{loid}{suffixes}"
@@ -127,7 +120,7 @@ class PostgresqlLargeObjectFile(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
 
-    def __init__(self, storage: PostgresqlLargeObjectStorage, loid: int, mode: str = "rb", name: str = '') -> None:
+    def __init__(self, storage: PostgresqlLargeObjectStorage, loid: int, mode: str = "rb", name: str = "") -> None:
         self._storage = storage
         self._loid = loid
         self._mode = mode
@@ -150,7 +143,6 @@ class PostgresqlLargeObjectFile(io.IOBase):
         self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
         self._fd = self._cursor.fetchone()[0]
         self._name = name or str(self._loid)
-        pass
 
     def __str__(self) -> str:
         return f"<PostgresqlLargeObjectFile: {self._loid}>"
@@ -175,25 +167,6 @@ class PostgresqlLargeObjectFile(io.IOBase):
         self.close()
 
     # file protocol
-    def __iter__(self) -> Iterator[bytes]:
-        return self
-
-    def __next__(self) -> bytes:
-        data = self.read(self.CHUNK_SIZE)
-        if not data:
-            raise StopIteration
-        return data
-
-    def __del__(self) -> None:
-        if not self.closed:
-            warnings.warn(
-                "Unclosed file {!r}".format(self),
-                ResourceWarning,
-                stacklevel=2,
-                source=self
-            )
-            self.close()
-
     def open(self, mode=None, *args, **kwargs) -> Self:
         if not self.closed:
             self.close()
@@ -216,6 +189,25 @@ class PostgresqlLargeObjectFile(io.IOBase):
             fd, self._fd = self._fd, None
             cursor.execute("select lo_close(%s)", [fd])
             cursor.close()
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __next__(self) -> bytes:
+        data = self.read(self.CHUNK_SIZE)
+        if not data:
+            raise StopIteration
+        return data
+
+    def __del__(self) -> None:
+        if not self.closed:
+            warnings.warn(
+                "Unclosed file {!r}".format(self),
+                ResourceWarning,
+                stacklevel=2,
+                source=self
+            )
+            self.close()
 
     @property
     def closed(self) -> bool:
@@ -251,7 +243,7 @@ class PostgresqlLargeObjectFile(io.IOBase):
         return data
 
     def readall(self) -> bytes | None:
-        data = b''
+        data = b""
         while True:
             chunk = self.read(self.CHUNK_SIZE)
             if not chunk:
@@ -272,13 +264,13 @@ class PostgresqlLargeObjectFile(io.IOBase):
 
     def readline(self, size=-1) -> bytes | None:
         pos = self.tell()
-        line = b''
+        line = b""
         while True:
-            chunk = self.read(512)
+            chunk = self.read(64)
             if not chunk:
                 break
             try:
-                i = chunk.index(b'\n')
+                i = chunk.index(b"\n")
                 line += chunk[0: i + 1]
                 break
             except ValueError:
