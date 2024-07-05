@@ -73,6 +73,7 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         loid = self._get_loid(name)
         # return PostgresqlLargeObjectFile(name, loid, mode, self)
         f = PostgresqlLargeObjectFile(self, loid, mode)
+        f.open()
         if "t" in mode:
             f = io.TextIOWrapper(f)
         return f
