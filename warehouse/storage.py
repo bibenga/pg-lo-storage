@@ -126,13 +126,13 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         else:
             raise ValueError(f"the mode '{mode}' is invalid")
 
-        self._cursor = connection.cursor()
-        if self._loid == 0:
-            self._cursor.execute("select lo_create(0) as loid")
-            self._loid = self._cursor.fetchone()[0]
-        self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
-        self._fd = self._cursor.fetchone()[0]
-        self._name = name or str(self._loid)
+        with connection.cursor() as cursor:
+            if self._loid == 0:
+                cursor.execute("select lo_create(0) as loid")
+                self._loid = cursor.fetchone()[0]
+            cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
+            self._fd = cursor.fetchone()[0]
+            self._name = name or str(self._loid)
 
     def __str__(self) -> str:
         return self._name or str(self._loid)
@@ -146,10 +146,20 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
 
     @property
     def size(self) -> int:
-        pos = self.tell()
-        self.seek(0, os.SEEK_END)
-        size = self.tell()
-        self.seek(pos, os.SEEK_SET)
+        with connection.cursor() as cursor:
+            # pos = self.tell()
+            cursor.execute("select lo_tell64(%s)", [self._fd])
+            pos = cursor.fetchone()[0]
+
+            # self.seek(0, os.SEEK_END)
+            cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, 0, os.SEEK_END])
+
+            # size = self.tell()
+            cursor.execute("select lo_tell64(%s)", [self._fd])
+            size = cursor.fetchone()[0]
+
+            # self.seek(pos, os.SEEK_SET)
+            cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, pos, os.SEEK_SET])
         return size
 
     # Context management protocol
@@ -176,16 +186,16 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         else:
             raise ValueError(f"the mode '{mode}' is invalid")
 
-        self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
-        self._fd = self._cursor.fetchone()[0]
+        with connection.cursor() as cursor:
+            cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
+            self._fd = cursor.fetchone()[0]
         return self
 
     def close(self) -> None:
         if not self.closed:
-            cursor, self._cursor = self._cursor, None
             fd, self._fd = self._fd, None
-            cursor.execute("select lo_close(%s)", [fd])
-            cursor.close()
+            with connection.cursor() as cursor:
+                cursor.execute("select lo_close(%s)", [fd])
 
     def __iter__(self) -> Iterator[bytes]:
         pos = self.tell()
@@ -261,8 +271,9 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
     def read(self, size: int = -1) -> bytes | None:
         if size is None or size < 0:
             return self.readall()
-        self._cursor.execute("select loread(%s, %s)", [self._fd, size])
-        data = self._cursor.fetchone()[0]
+        with connection.cursor() as cursor:
+            cursor.execute("select loread(%s, %s)", [self._fd, size])
+            data = cursor.fetchone()[0]
         if not data:
             return None
         return data
@@ -334,25 +345,29 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
             whence = SEEK_END
         else:
             raise ValueError("the whence is invalid")
-        self._cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
+        with connection.cursor() as cursor:
+            cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
         return self.tell()
 
     def tell(self) -> int:
-        self._cursor.execute("select lo_tell64(%s)", [self._fd])
-        pos = self._cursor.fetchone()[0]
+        with connection.cursor() as cursor:
+            cursor.execute("select lo_tell64(%s)", [self._fd])
+            pos = cursor.fetchone()[0]
         return pos
 
     def truncate(self, size: int | None = None) -> int:
         if size is None:
             size = self.tell()
-        self._cursor.execute("select lo_truncate64(%s, %s)", [self._fd, size])
+        with connection.cursor() as cursor:
+            cursor.execute("select lo_truncate64(%s, %s)", [self._fd, size])
         return size
 
     def writable(self) -> bool:
         return "w" in self._mode
 
     def write(self, b: bytes) -> int | None:
-        self._cursor.execute("select lowrite(%s, %s)", [self._fd, b])
+        with connection.cursor() as cursor:
+            cursor.execute("select lowrite(%s, %s)", [self._fd, b])
         return len(b)
 
     def writelines(self, iterable: Iterable[bytes]) -> None:
