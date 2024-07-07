@@ -57,11 +57,11 @@ class DbFileStorage(Storage, StorageSettingsMixin):
         if "b" not in mode:
             raise ValueError("the text mode is unsuported")
         loid = self._get_loid(name)
-        file = DbFileIO(self, loid, mode, name)
+        file = DbFileIO(loid, mode, name)
         return DbFile(file, mode)
 
     def _save(self, name: str, content: Iterable[bytes]) -> str:
-        with DbFileIO(self, 0, "wb") as f:
+        with DbFileIO(0, "wb") as f:
             loid = f.loid
             for chunk in content.chunks():
                 f.write(chunk)
@@ -110,8 +110,7 @@ class DbFileIO(io.IOBase):
     CHUNK_SIZE = 65536
     LINE_SIZE = 64
 
-    def __init__(self, storage: DbFileStorage, loid: int, mode: str = "rb", name: str = "") -> None:
-        self._storage = storage
+    def __init__(self, loid: int, mode: str = "rb", name: str = "") -> None:
         self._loid = loid
         self._mode = mode
 

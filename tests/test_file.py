@@ -8,7 +8,7 @@ from warehouse.storage import DbFileStorage, DbFileIO
 class TestDbFileIO:
     def test_create_and_write(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as f:
+            with DbFileIO(0, "wb") as f:
                 f.write(b'aa')
                 assert f.loid is not None
 
@@ -18,22 +18,22 @@ class TestDbFileIO:
 
     def test_write_and_read(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'ab')
                 assert w.loid is not None
 
-            with DbFileIO(None, w.loid, "rb") as r:
+            with DbFileIO(w.loid, "rb") as r:
                 assert r.read(1) == b'a'
                 assert r.read(1) == b'b'
                 assert r.read(1) == None
 
     def test_tell(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'ab')
                 assert w.loid is not None
 
-            with DbFileIO(None, w.loid, "rb") as r:
+            with DbFileIO(w.loid, "rb") as r:
                 assert r.tell() == 0
                 assert r.read(1) == b'a'
                 assert r.tell() == 1
@@ -44,7 +44,7 @@ class TestDbFileIO:
 
     def test_size(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'abcd')
                 assert w.size == 4
                 assert w.tell() == 4
@@ -55,18 +55,18 @@ class TestDbFileIO:
 
     def test_writelines(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.writelines([b'ab\n', b'cd\n'])
                 assert w.loid is not None
                 assert w.size == 6
 
     def test_readline(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'abcd\nef')
                 assert w.loid is not None
 
-            with DbFileIO(None, w.loid, "rb") as r:
+            with DbFileIO(w.loid, "rb") as r:
                 assert r.readline(3) == b'abc'
                 assert r.tell() == 3
 
@@ -76,22 +76,22 @@ class TestDbFileIO:
 
     def test_readlines(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'ab\ncd\n')
                 assert w.loid is not None
 
-            with DbFileIO(None, w.loid, "rb") as r:
+            with DbFileIO(w.loid, "rb") as r:
                 lines = r.readlines()
                 assert lines == [b'ab\n', b'cd\n']
                 assert r.tell() == 6
 
     def test_iter(self):
         with transaction.atomic():
-            with DbFileIO(None, 0, "wb") as w:
+            with DbFileIO(0, "wb") as w:
                 w.write(b'ab\ncd\ne')
                 assert w.loid is not None
 
-            with DbFileIO(None, w.loid, "rb") as r:
+            with DbFileIO(w.loid, "rb") as r:
                 assert next(r) == b'ab\n'
                 assert r.tell() == 3
                 assert next(r) == b'cd\n'
