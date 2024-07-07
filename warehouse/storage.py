@@ -115,7 +115,7 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         self._loid = loid
         self._mode = mode
 
-        if "b" not in mode:
+        if "t" in mode:
             raise ValueError("the text mode is unsuported")
         if "r" in mode and "w" in mode:
             mode = MODE_READWRITE
@@ -135,7 +135,10 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         self._name = name or str(self._loid)
 
     def __str__(self) -> str:
-        return f"<PostgresqlLargeObjectFile: {self._loid}>"
+        return self._name or str(self._loid)
+
+    def __repr__(self) -> str:
+        return f"<PostgresqlLargeObjectFile: {self._loid}, {self._name}>"
 
     @property
     def loid(self) -> int:
@@ -158,9 +161,12 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
 
     # file protocol
     def open(self, mode=None, *args, **kwargs) -> Self:
+        # reopen
         if not self.closed:
             self.close()
 
+        if "t" in mode:
+            raise ValueError("the text mode is unsuported")
         if "r" in mode and "w" in mode:
             mode = MODE_READWRITE
         elif "r" in mode:
@@ -169,6 +175,7 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
             mode = MODE_WRITE
         else:
             raise ValueError(f"the mode '{mode}' is invalid")
+
         self._cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
         self._fd = self._cursor.fetchone()[0]
         return self
@@ -251,7 +258,7 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
     def readable(self) -> bool:
         return "r" in self._mode
 
-    def read(self, size=-1) -> bytes | None:
+    def read(self, size: int = -1) -> bytes | None:
         if size is None or size < 0:
             return self.readall()
         self._cursor.execute("select loread(%s, %s)", [self._fd, size])
@@ -280,7 +287,9 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
             if len(chunk) < self.CHUNK_SIZE:
                 break
 
-    def readline(self, size=-1) -> bytes | None:
+    def readline(self, size: int = -1) -> bytes | None:
+        if size == 0:
+            return b""
         pos = self.tell()
         line = b""
         while True:
@@ -303,7 +312,9 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         self.seek(pos + len(line), os.SEEK_SET)
         return line
 
-    def readlines(self, hint=-1):
+    def readlines(self, hint: int = -1) -> list[bytes]:
+        if hint == 0:
+            return []
         lines = []
         for line in self:
             lines.append(line)
@@ -311,10 +322,10 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
                 break
         return lines
 
-    def seekable(self):
+    def seekable(self) -> bool:
         return True
 
-    def seek(self, offset, whence=os.SEEK_SET) -> int:
+    def seek(self, offset: int, whence=os.SEEK_SET) -> int:
         if whence == os.SEEK_SET:
             whence = SEEK_SET
         elif whence == os.SEEK_CUR:
@@ -326,12 +337,12 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
         self._cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
         return self.tell()
 
-    def tell(self):
+    def tell(self) -> int:
         self._cursor.execute("select lo_tell64(%s)", [self._fd])
         pos = self._cursor.fetchone()[0]
         return pos
 
-    def truncate(self, size=None):
+    def truncate(self, size: int | None = None) -> int:
         if size is None:
             size = self.tell()
         self._cursor.execute("select lo_truncate64(%s, %s)", [self._fd, size])
@@ -340,10 +351,10 @@ class RawPostgresqlLargeObjectFile(io.IOBase):
     def writable(self) -> bool:
         return "w" in self._mode
 
-    def write(self, b) -> int | None:
+    def write(self, b: bytes) -> int | None:
         self._cursor.execute("select lowrite(%s, %s)", [self._fd, b])
         return len(b)
 
-    def writelines(self, iterable: Iterable) -> None:
+    def writelines(self, iterable: Iterable[bytes]) -> None:
         for s in iterable:
             self.write(s)
