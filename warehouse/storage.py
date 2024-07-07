@@ -23,17 +23,17 @@ SEEK_CUR = io.SEEK_CUR  # 1
 SEEK_END = io.SEEK_END  # 2
 
 
-class DefaultPostgresqlLargeObjectStorage(LazyObject):
+class DefaultDbFileStorage(LazyObject):
     def _setup(self):
-        from warehouse.storage import PostgresqlLargeObjectStorage
-        self._wrapped = PostgresqlLargeObjectStorage()
+        from warehouse.storage import DbFileStorage
+        self._wrapped = DbFileStorage()
 
 
-postgresql_large_object_storage: 'PostgresqlLargeObjectStorage' = DefaultPostgresqlLargeObjectStorage()
+db_file_storage: 'DbFileStorage' = DefaultDbFileStorage()
 
 
-@deconstructible(path="warehouse.storage.PostgresqlLargeObjectStorage")
-class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
+@deconstructible(path="warehouse.storage.DbFileStorage")
+class DbFileStorage(Storage, StorageSettingsMixin):
     def __init__(self, base_url: str | None = None) -> None:
         self._base_url = base_url or settings.MEDIA_URL
         setting_changed.connect(self._clear_cached_properties)
@@ -57,11 +57,11 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         if "b" not in mode:
             raise ValueError("the text mode is unsuported")
         loid = self._get_loid(name)
-        file = RawPostgresqlLargeObjectFile(self, loid, mode, name)
-        return PostgresqlLargeObjectFile(file, mode)
+        file = DbFileIO(self, loid, mode, name)
+        return DbFile(file, mode)
 
     def _save(self, name: str, content: Iterable[bytes]) -> str:
-        with RawPostgresqlLargeObjectFile(self, 0, "wb") as f:
+        with DbFileIO(self, 0, "wb") as f:
             loid = f.loid
             for chunk in content.chunks():
                 f.write(chunk)
@@ -99,18 +99,18 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         return urljoin(self._base_url, name).replace("\\", "/")
 
 
-class PostgresqlLargeObjectFile(File):
+class DbFile(File):
     def open(self, mode: str | None = ...) -> Self:
         self.file.open(mode)
         return self
 
 
-class RawPostgresqlLargeObjectFile(io.IOBase):
+class DbFileIO(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
     LINE_SIZE = 64
 
-    def __init__(self, storage: PostgresqlLargeObjectStorage, loid: int, mode: str = "rb", name: str = "") -> None:
+    def __init__(self, storage: DbFileStorage, loid: int, mode: str = "rb", name: str = "") -> None:
         self._storage = storage
         self._loid = loid
         self._mode = mode

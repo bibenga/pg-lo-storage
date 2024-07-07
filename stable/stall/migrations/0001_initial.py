@@ -26,10 +26,10 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "file0",
-                    warehouse.fields.PostgresqlLargeObjectFileField(
+                    warehouse.fields.DbFileField(
                         blank=True,
                         null=True,
-                        storage=warehouse.storage.PostgresqlLargeObjectStorage(),
+                        storage=warehouse.storage.DbFileStorage(),
                         upload_to="",
                     ),
                 ),
@@ -38,7 +38,7 @@ class Migration(migrations.Migration):
                     models.FileField(
                         blank=True,
                         null=True,
-                        storage=warehouse.storage.PostgresqlLargeObjectStorage(),
+                        storage=warehouse.storage.DbFileStorage(),
                         upload_to="",
                     ),
                 ),

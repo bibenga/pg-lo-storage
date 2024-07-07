@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound
 
-from warehouse.storage import postgresql_large_object_storage
+from warehouse.storage import db_file_storage
 
 
 @login_required
@@ -13,7 +13,7 @@ def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
     content_type, encoding = mimetypes.guess_type(filename)
     content_type = content_type or "application/octet-stream"
 
-    storage = postgresql_large_object_storage
+    storage = db_file_storage
     if not storage.exists(filename):
         return HttpResponseNotFound()
 
