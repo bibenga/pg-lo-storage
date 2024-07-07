@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from django.conf import settings
 from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
+from django.core.files import File
 from django.core.signals import setting_changed
 from django.db import ProgrammingError, connection, transaction
 from django.utils.deconstruct import deconstructible
@@ -113,6 +114,15 @@ class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
         return urljoin(self._base_url, name).replace("\\", "/")
 
 
+class PostgresqlLargeObjectFile2(File):
+    def __init__(self, file: 'PostgresqlLargeObjectFile', name: str | None = ...) -> None:
+        super().__init__(file, name)
+
+    def open(self, mode: str | None = ...) -> Self:
+        self.file.open(mode)
+        return self
+
+
 class PostgresqlLargeObjectFile(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
@@ -195,7 +205,7 @@ class PostgresqlLargeObjectFile(io.IOBase):
             if chunk_len > 0:
                 pos += chunk_len
                 self.seek(pos)
-            chunk = self.read(2)
+            chunk = self.read(self.CHUNK_SIZE)
             if not chunk:
                 break
             chunk_len = len(chunk)
