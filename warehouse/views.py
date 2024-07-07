@@ -3,7 +3,7 @@ from tempfile import SpooledTemporaryFile
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import FileResponse, HttpRequest, HttpResponse
+from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound
 
 from warehouse.storage import postgresql_large_object_storage
 
@@ -12,10 +12,15 @@ from warehouse.storage import postgresql_large_object_storage
 def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
     content_type, encoding = mimetypes.guess_type(filename)
     content_type = content_type or "application/octet-stream"
+
+    storage = postgresql_large_object_storage
+    if not storage.exists(filename):
+        return HttpResponseNotFound()
+
     t = SpooledTemporaryFile()
     try:
         with transaction.atomic():
-            with postgresql_large_object_storage.open(filename) as f:
+            with storage.open(filename) as f:
                 for chunk in f:
                     t.write(chunk)
     except:

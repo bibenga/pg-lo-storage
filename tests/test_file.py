@@ -1,14 +1,14 @@
 import pytest
 
 from django.db import transaction
-from warehouse.storage import PostgresqlLargeObjectStorage, PostgresqlLargeObjectFile
+from warehouse.storage import PostgresqlLargeObjectStorage, RawPostgresqlLargeObjectFile
 
 
 @pytest.mark.django_db(transaction=True)
-class TestPostgresqlLargeObjectFile:
+class TestRawPostgresqlLargeObjectFile:
     def test_create_and_write(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as f:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as f:
                 f.write(b'aa')
                 assert f.loid is not None
 
@@ -18,22 +18,22 @@ class TestPostgresqlLargeObjectFile:
 
     def test_write_and_read(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.write(b'ab')
                 assert w.loid is not None
 
-            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+            with RawPostgresqlLargeObjectFile(None, w.loid, "rb") as r:
                 assert r.read(1) == b'a'
                 assert r.read(1) == b'b'
                 assert r.read(1) == None
 
     def test_tell(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.write(b'ab')
                 assert w.loid is not None
 
-            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+            with RawPostgresqlLargeObjectFile(None, w.loid, "rb") as r:
                 assert r.tell() == 0
                 assert r.read(1) == b'a'
                 assert r.tell() == 1
@@ -44,18 +44,18 @@ class TestPostgresqlLargeObjectFile:
 
     def test_writelines(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.writelines([b'ab\n', b'cd\n'])
                 assert w.loid is not None
                 assert w.size == 6
 
     def test_readline(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.write(b'abcd\nef')
                 assert w.loid is not None
 
-            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+            with RawPostgresqlLargeObjectFile(None, w.loid, "rb") as r:
                 assert r.readline(3) == b'abc'
                 assert r.tell() == 3
 
@@ -65,22 +65,22 @@ class TestPostgresqlLargeObjectFile:
 
     def test_readlines(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.write(b'ab\ncd\n')
                 assert w.loid is not None
 
-            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+            with RawPostgresqlLargeObjectFile(None, w.loid, "rb") as r:
                 lines = r.readlines()
                 assert lines == [b'ab\n', b'cd\n']
                 assert r.tell() == 6
 
     def test_iter(self):
         with transaction.atomic():
-            with PostgresqlLargeObjectFile(None, 0, "wb") as w:
+            with RawPostgresqlLargeObjectFile(None, 0, "wb") as w:
                 w.write(b'ab\ncd\ne')
                 assert w.loid is not None
 
-            with PostgresqlLargeObjectFile(None, w.loid, "rb") as r:
+            with RawPostgresqlLargeObjectFile(None, w.loid, "rb") as r:
                 assert next(r) == b'ab\n'
                 assert r.tell() == 3
                 assert next(r) == b'cd\n'

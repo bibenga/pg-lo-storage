@@ -1,7 +1,6 @@
 import io
 import os
 import pathlib
-import warnings
 from types import TracebackType
 from typing import Iterable, Iterator, Self
 from urllib.parse import urljoin
@@ -11,20 +10,17 @@ from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
 from django.core.files import File
 from django.core.signals import setting_changed
-from django.db import ProgrammingError, connection, transaction
+from django.db import ProgrammingError, connection
 from django.utils.deconstruct import deconstructible
 from django.utils.functional import LazyObject
 
 MODE_WRITE = 0x20000
-
 MODE_READ = 0x40000
 MODE_READWRITE = MODE_READ | MODE_WRITE
 
 SEEK_SET = io.SEEK_SET  # 0
 SEEK_CUR = io.SEEK_CUR  # 1
 SEEK_END = io.SEEK_END  # 2
-
-# select loid, count(pageno) from pg_largeobject group by loid
 
 
 class DefaultPostgresqlLargeObjectStorage(LazyObject):
@@ -33,99 +29,86 @@ class DefaultPostgresqlLargeObjectStorage(LazyObject):
         self._wrapped = PostgresqlLargeObjectStorage()
 
 
-postgresql_large_object_storage: Storage = DefaultPostgresqlLargeObjectStorage()
+postgresql_large_object_storage: 'PostgresqlLargeObjectStorage' = DefaultPostgresqlLargeObjectStorage()
 
 
 @deconstructible(path="warehouse.storage.PostgresqlLargeObjectStorage")
 class PostgresqlLargeObjectStorage(Storage, StorageSettingsMixin):
-    def __init__(
-        self,
-        base_url=None,
-        file_permissions_mode=None,
-        directory_permissions_mode=None,
-    ):
+    def __init__(self, base_url: str | None = None) -> None:
         self._base_url = base_url or settings.MEDIA_URL
-        self._file_permissions_mode = file_permissions_mode
-        self._directory_permissions_mode = directory_permissions_mode
-        # self._root = InMemoryDirNode()
-        # self._resolve(
-        #     self.base_location, create_if_missing=True, leaf_cls=InMemoryDirNode
-        # )
         setting_changed.connect(self._clear_cached_properties)
 
-    def generate_filename(self, filename):
-        # with connection.cursor() as cursor:
-        #     cursor.execute("select lo_create(0) as loid")
-        #     row = cursor.fetchone()
-        #     loid = row[0]
-        # return str(loid)
+    def generate_filename(self, filename: str) -> str:
+        """The operation is not supported and real name was provided on the save operation"""
         return filename
 
-    def get_available_name(self, filename, max_length=None):
+    def get_available_name(self, filename: str, max_length=None) -> str:
+        """The operation is not supported and real name was provided on the save operation"""
         return filename
 
-    def _get_loid(self, name):
-        loid = int(pathlib.Path(name).stem)
-        return loid
+    def _get_loid(self, name) -> int:
+        try:
+            loid = int(pathlib.Path(name).stem)
+            return loid
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"the name '{name}' is invalid")
 
-    def _open(self, name, mode="rb"):
+    def _open(self, name, mode="rb") -> File:
         if "b" not in mode:
             raise ValueError("the text mode is unsuported")
         loid = self._get_loid(name)
-        # return PostgresqlLargeObjectFile(name, loid, mode, self)
-        return PostgresqlLargeObjectFile(self, loid, mode)
+        file = RawPostgresqlLargeObjectFile(self, loid, mode, name)
+        return PostgresqlLargeObjectFile(file, mode)
 
-    def _save(self, name, content):
-        with PostgresqlLargeObjectFile(self, 0, "wb") as f:
+    def _save(self, name: str, content: Iterable[bytes]) -> str:
+        with RawPostgresqlLargeObjectFile(self, 0, "wb") as f:
+            loid = f.loid
             for chunk in content.chunks():
                 f.write(chunk)
-            loid = f.loid
         suffixes = pathlib.Path(name).suffixes
         suffixes = "".join(suffixes)
         return f"{loid}{suffixes}"
 
-    def delete(self, name):
-        # loid = int(name)
+    def delete(self, name: str) -> None:
         loid = self._get_loid(name)
         try:
-            with transaction.atomic():
-                with connection.cursor() as cursor:
-                    cursor.execute("select lo_unlink(%s)", [int(loid)])
+            with connection.cursor() as cursor:
+                cursor.execute("select lo_unlink(%s)", [int(loid)])
         except ProgrammingError as err:
-            # django.db.utils.ProgrammingError: large object 38450 does not exist
-            pass
+            if str(err) == f"large object {loid} does not exist":
+                return
+            raise
 
-    def exists(self, name):
-        with transaction.atomic():
-            with self._open(name):
-                return True
-        return False
+    def exists(self, name: str) -> bool:
+        loid = self._get_loid(name)
+        with connection.cursor() as cursor:
+            cursor.execute("select exists(select loid from pg_largeobject where loid=%s)", [loid])
+            return cursor.fetchone()[0]
 
-    def listdir(self, path):
+    def listdir(self, path: str):
         raise NotImplementedError()
 
-    def size(self, name):
+    def size(self, name: str) -> int:
         with self._open(name) as f:
             return f.size
 
-    def url(self, name):
+    def url(self, name: str) -> str:
+        self._get_loid(name)
         if self._base_url is None:
             raise ValueError("This file is not accessible via a URL.")
         return urljoin(self._base_url, name).replace("\\", "/")
 
 
-class PostgresqlLargeObjectFile2(File):
-    def __init__(self, file: 'PostgresqlLargeObjectFile', name: str | None = ...) -> None:
-        super().__init__(file, name)
-
+class PostgresqlLargeObjectFile(File):
     def open(self, mode: str | None = ...) -> Self:
         self.file.open(mode)
         return self
 
 
-class PostgresqlLargeObjectFile(io.IOBase):
+class RawPostgresqlLargeObjectFile(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
+    LINE_SIZE = 64
 
     def __init__(self, storage: PostgresqlLargeObjectStorage, loid: int, mode: str = "rb", name: str = "") -> None:
         self._storage = storage
@@ -233,19 +216,20 @@ class PostgresqlLargeObjectFile(io.IOBase):
             self.seek(len(buf), os.SEEK_CUR)
             yield buf
 
-    def __del__(self) -> None:
-        if not self.closed:
-            warnings.warn(
-                "Unclosed file {!r}".format(self),
-                ResourceWarning,
-                stacklevel=2,
-                source=self
-            )
-            self.close()
+    # doesn't work
+    # def __del__(self) -> None:
+    #     if not self.closed:
+    #         warnings.warn(
+    #             "Unclosed file {!r}".format(self),
+    #             ResourceWarning,
+    #             stacklevel=2,
+    #             source=self
+    #         )
+    #         self.close()
 
     @property
     def closed(self) -> bool:
-        return self._cursor is None
+        return self._fd is None
 
     def fileno(self):
         return self._fd
@@ -300,7 +284,7 @@ class PostgresqlLargeObjectFile(io.IOBase):
         pos = self.tell()
         line = b""
         while True:
-            chunk = self.read(64)
+            chunk = self.read(self.LINE_SIZE)
             if not chunk:
                 break
             try:
@@ -308,8 +292,9 @@ class PostgresqlLargeObjectFile(io.IOBase):
                 line += chunk[0: i + 1]
                 break
             except ValueError:
+                # b"\n" is not found
                 line += chunk
-                if len(line) >= size:
+                if size > 0 and len(line) >= size:
                     break
         if not line:
             return None
