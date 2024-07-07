@@ -9,7 +9,7 @@ from warehouse.storage import db_file_storage
 
 
 @login_required
-def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
+def db_serve(request: HttpRequest, filename: str) -> HttpResponse:
     content_type, encoding = mimetypes.guess_type(filename)
     content_type = content_type or "application/octet-stream"
 
