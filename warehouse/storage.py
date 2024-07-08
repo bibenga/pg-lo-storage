@@ -261,7 +261,7 @@ class DbFileIO(io.IOBase):
         return self._mode
 
     @property
-    def name(self) -> str:
+    def name(self) -> str | None:
         return self._name
 
     def readable(self) -> bool:
@@ -276,6 +276,9 @@ class DbFileIO(io.IOBase):
         if not data:
             return None
         return data
+
+    def read1(self, size: int = -1) -> bytes | None:
+        return self.read(size)
 
     def readall(self) -> bytes | None:
         data = b""
@@ -296,6 +299,9 @@ class DbFileIO(io.IOBase):
             b.write(chunk)
             if len(chunk) < self.CHUNK_SIZE:
                 break
+
+    def readinto1(self, b) -> None:
+        self.readinto(b)
 
     def readline(self, size: int = -1) -> bytes | None:
         if size == 0:
