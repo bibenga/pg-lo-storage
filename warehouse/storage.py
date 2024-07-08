@@ -287,8 +287,6 @@ class DbFileIO(io.IOBase):
             if not chunk:
                 break
             data += chunk
-            if len(chunk) < self.CHUNK_SIZE:
-                break
         return data
 
     def readinto(self, b) -> None:
@@ -297,8 +295,6 @@ class DbFileIO(io.IOBase):
             if not chunk:
                 break
             b.write(chunk)
-            if len(chunk) < self.CHUNK_SIZE:
-                break
 
     def readinto1(self, b) -> None:
         self.readinto(b)
