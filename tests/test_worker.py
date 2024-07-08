@@ -1,6 +1,7 @@
 import pytest
-
 from django.db import transaction
+
+from warehouse.storage import MODE_READWRITE, SEEK_END, SEEK_SET
 
 
 @pytest.mark.django_db(transaction=True)
@@ -8,13 +9,6 @@ class TestLargeObject:
     def test_lo(self, mocker):
         # https://www.postgresql.org/docs/16/lo-funcs.html
         # https://www.postgresql.org/docs/current/lo-interfaces.html
-        MODE_WRITE = 0x20000
-        MODE_READ = 0x40000
-        MODE_READWRITE = MODE_READ | MODE_WRITE
-
-        SEEK_SET = 0
-        SEEK_CUR = 1
-        SEEK_END = 2
         with transaction.atomic():
             conn = transaction.get_connection()
             with conn.cursor() as cursor:
