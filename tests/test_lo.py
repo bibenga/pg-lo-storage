@@ -15,11 +15,13 @@ class TestLargeObject:
                 cursor.execute("select loid from pg_largeobject")
                 loids = [row for row in cursor.fetchall()]
                 print(loids)
+                assert loids == []
 
                 cursor.execute("select lo_create(0) as loid")
                 row = cursor.fetchone()
                 print(row)
                 loid = row[0]
+                assert loid != 0
 
                 cursor.execute("select lo_put(%s, 2, %s)", [loid, "olala".encode()])
                 row = cursor.fetchone()

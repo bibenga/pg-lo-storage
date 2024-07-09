@@ -56,18 +56,17 @@ class DbFileStorage(Storage, StorageSettingsMixin):
     def _open(self, name, mode="rb") -> File:
         if "b" not in mode:
             raise ValueError("the text mode is unsuported")
+        if not self.exists(name):
+            raise FileNotFoundError("File does not exist: %s" % name)
         loid = self._get_loid(name)
         file = DbFileIO(loid, mode, name)
-        return DbFile(file, mode)
+        return DbFile(file, file.name)
 
     def _save(self, name: str, content: Iterable[bytes]) -> str:
-        with DbFileIO(0, "wb") as f:
-            loid = f.loid
+        with DbFileIO(0, "wb", name) as f:
             for chunk in content.chunks():
                 f.write(chunk)
-        suffixes = pathlib.Path(name).suffixes
-        suffixes = "".join(suffixes)
-        return f"{loid}{suffixes}"
+            return f.name
 
     def delete(self, name: str) -> None:
         loid = self._get_loid(name)
@@ -113,6 +112,7 @@ class DbFileIO(io.IOBase):
     def __init__(self, loid: int, mode: str = "rb", name: str = "") -> None:
         self._loid = loid
         self._mode = mode
+        self._name = name
 
         if "t" in mode:
             raise ValueError("the text mode is unsuported")
@@ -129,9 +129,10 @@ class DbFileIO(io.IOBase):
             if self._loid == 0:
                 cursor.execute("select lo_create(0) as loid")
                 self._loid = cursor.fetchone()[0]
+                self._name = str(self._loid) + "".join(pathlib.Path(name).suffixes)
             cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
             self._fd = cursor.fetchone()[0]
-            self._name = name or str(self._loid)
+            # self._name = name or str(self._loid)
 
     def __str__(self) -> str:
         return self._name or str(self._loid)
@@ -265,7 +266,8 @@ class DbFileIO(io.IOBase):
         return self._name
 
     def readable(self) -> bool:
-        return "r" in self._mode
+        # return "r" in self._mode
+        return True
 
     def read(self, size: int = -1) -> bytes | None:
         if size is None or size < 0:
