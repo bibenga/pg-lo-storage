@@ -1,4 +1,4 @@
-# Use PostgreSQL large objects for file storage
+## Use PostgreSQL large objects for file storage
 
 This storage is created to store **important files** that belong to a user.
 **It should not be used to store publicly available files or videos.**
