@@ -2,7 +2,7 @@
 name = "warehouse-py"
 version = "0.1.0"
 authors = [
-  { name="Space Void", email="234253453453@43234234234234.com" },
+#  { name="Space Void", email="" },
 ]
 description = "Use PostgreSQL large objects for file storage"
 license = {text = "MIT"}
