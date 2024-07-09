@@ -12,14 +12,14 @@ on:
   release:
     types: [published]
 
-permissions:
-  # contents: write
-  id-token: write
-
 jobs:
   deploy:
     if: github.repository == 'bibenga/pg-lo-storage'
     runs-on: ubuntu-latest
+
+    permissions:
+      # contents: write
+      id-token: write
 
     environment:
       name: pypi
