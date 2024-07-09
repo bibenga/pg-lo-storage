@@ -1,8 +1,8 @@
 [project]
-name = "warehouse-py"
+name = "pg-lo-warehouse"
 version = "0.1.0"
 authors = [
-#  { name="Space Void", email="" },
+#  { name="Bibenga", email="" },
 ]
 description = "Use PostgreSQL large objects for file storage"
 license = {text = "MIT"}
