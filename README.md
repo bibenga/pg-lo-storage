@@ -1,8 +1,17 @@
 # warehouse-py
 
-Use PostgreSQL large objects for file storage. The main benefit is that it works with **transaction**.
-The DbFileStorage use a template `<loid>.<original_extension>` for field (where loid is a large object id).
-The DbFileIO is a file-like object that translates calls to SQL.
+Use PostgreSQL large objects for file storage.
+This storage is created to store **important files** that belong to a user.
+**It should not be used to store publicly available files or videos.**
+The main benefit is that it works with **transaction** and you can create or delete a file and be confident that the file will still exist if the transaction is rolled back.
+
+When the storage saves a file, a new filename with the template <loid>.<original_extension> is always created and the attribute upload_to is not used.
+
+You can use DbFileIO without a storage.
+
+The settings:
+* WAREHOUSE_DB_FOR_READ - a database for read files (default is `default`)
+* WAREHOUSE_DB_FOR_WRITE - a database for create and write files (default is `default`)
 
 Some links:
 * https://docs.djangoproject.com/en/5.0/ref/files/storage/
@@ -19,20 +28,21 @@ from warehouse.fields import DbFileField
 from warehouse.storage import db_file_storage
 
 
-class SomeModel(models.Model):
+class Invoice(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     data = DbFileField(null=True, blank=True)
     or_just_so = models.FileField(storage=db_file_storage, null=True, blank=True)
 
 
-@receiver(post_init, sender=SomeModel)
-def user_file_initialized(sender, instance: SomeModel, **kwargs):
+@receiver(post_init, sender=Invoice)
+def user_file_initialized(sender, instance: Invoice, **kwargs):
     instance._lo_prev_state = {
         'data': instance.data.name if instance.data else None,
     }
 
 
-@receiver(post_save, sender=SomeModel)
-def user_file_saved(sender, instance: SomeModel, created: bool, **kwargs):
+@receiver(post_save, sender=Invoice)
+def user_file_saved(sender, instance: Invoice, created: bool, **kwargs):
     # this is safe because large objects support transactions
     if not created and hasattr(instance, '_lo_prev_state'):
         state = instance._lo_prev_state
@@ -40,8 +50,8 @@ def user_file_saved(sender, instance: SomeModel, created: bool, **kwargs):
             instance.data.storage.delete(state['data'])
 
 
-@receiver(post_delete, sender=SomeModel)
-def user_file_deleted(sender, instance: SomeModel, **kwargs):
+@receiver(post_delete, sender=Invoice)
+def user_file_deleted(sender, instance: Invoice, **kwargs):
     # this is safe because large objects support transactions
     if instance.data:
         instance.data.storage.delete(instance.data.name)
@@ -49,33 +59,12 @@ def user_file_deleted(sender, instance: SomeModel, **kwargs):
 
 For serve files you can use example code:
 ```python
-import mimetypes
-from tempfile import SpooledTemporaryFile
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound
-from warehouse.storage import db_file_storage
+from django.http import HttpResponseForbidden
+from warehouse.views import db_serve
 
 @login_required
 def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
-    content_type, encoding = mimetypes.guess_type(filename)
-    content_type = content_type or "application/octet-stream"
-    storage = db_file_storage
-    if not storage.exists(filename):
-        return HttpResponseNotFound()
-    t = SpooledTemporaryFile()
-    try:
-        with transaction.atomic():
-            with storage.open(filename) as f:
-                for chunk in f:
-                    t.write(chunk)
-    except:
-        t.close()
-        raise
-    t.seek(0)
-    response = FileResponse(t, content_type=content_type, filename=filename)
-    if encoding:
-        response.headers["Content-Encoding"] = encoding
-    return response
-
+    if request.user.id != 1:
+        return HttpResponseForbidden()
+    return db_serve(request, filename)
 ```
