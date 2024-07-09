@@ -1,7 +1,7 @@
 import pytest
 from django.db import transaction
 
-from warehouse.storage import MODE_READWRITE, SEEK_END, SEEK_SET
+from pg_lo_storage.storage import MODE_READWRITE, SEEK_END, SEEK_SET
 
 
 @pytest.mark.django_db(transaction=True)

@@ -6,7 +6,7 @@ from django.core.files.storage import Storage
 from django.db import transaction
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNotFound
 
-from warehouse.storage import DbFileIO, db_file_storage
+from pg_lo_storage.storage import DbFileIO, db_file_storage
 
 default_content_type = "application/octet-stream"
 

@@ -2,8 +2,8 @@ from django.db import models
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 
-from warehouse.fields import DbFileField
-from warehouse.storage import db_file_storage
+from pg_lo_storage.fields import DbFileField
+from pg_lo_storage.storage import db_file_storage
 
 
 class UserFile(models.Model):

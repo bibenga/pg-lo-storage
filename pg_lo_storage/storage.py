@@ -26,7 +26,7 @@ SEEK_END = io.SEEK_END  # 2
 
 class DefaultDbFileStorage(LazyObject):
     def _setup(self):
-        from warehouse.storage import DbFileStorage
+        from pg_lo_storage.storage import DbFileStorage
         self._wrapped = DbFileStorage()
 
 
@@ -34,14 +34,14 @@ db_file_storage: 'DbFileStorage' = DefaultDbFileStorage()
 
 
 def db_for_read(alias: str | None = None) -> str:
-    return alias or getattr(settings, "WAREHOUSE_DB_FOR_READ", "default")
+    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_READ", "default")
 
 
 def db_for_write(alias: str | None = None) -> str:
-    return alias or getattr(settings, "WAREHOUSE_DB_FOR_WRITE", "default")
+    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_WRITE", "default")
 
 
-@deconstructible(path="warehouse.storage.DbFileStorage")
+@deconstructible(path="pg_lo_storage.storage.DbFileStorage")
 class DbFileStorage(Storage, StorageSettingsMixin):
     def __init__(self, base_url: str | None = None, alias: str | None = None) -> None:
         self._base_url = base_url

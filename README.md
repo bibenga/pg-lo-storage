@@ -10,8 +10,8 @@ When the storage saves a file, a new filename with the template <loid>.<original
 You can use DbFileIO without a storage.
 
 The settings:
-* WAREHOUSE_DB_FOR_READ - a database for read files (default is `default`)
-* WAREHOUSE_DB_FOR_WRITE - a database for create and write files (default is `default`)
+* PG_LO_STORAGE_DB_FOR_READ - a database for read files (default is `default`)
+* PG_LO_STORAGE_DB_FOR_WRITE - a database for create and write files (default is `default`)
 
 ### Example
 
@@ -20,8 +20,8 @@ Add model:
 from django.db import models
 from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
-from warehouse.fields import DbFileField
-from warehouse.storage import db_file_storage, DbFileStorage
+from pg_lo_storage.fields import DbFileField
+from pg_lo_storage.storage import db_file_storage, DbFileStorage
 
 class Invoice(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -52,7 +52,7 @@ def user_file_deleted(sender, instance: Invoice, **kwargs):
 Add function to serve files:
 ```python
 from django.http import HttpResponseForbidden
-from warehouse.views import db_serve
+from pg_lo_storage.views import db_serve
 
 @login_required
 def invlice_serve(request: HttpRequest, filename: str) -> HttpResponse:

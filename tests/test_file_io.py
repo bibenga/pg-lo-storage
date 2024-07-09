@@ -1,7 +1,7 @@
 import pytest
 from django.db import transaction
 
-from warehouse.storage import DbFileIO
+from pg_lo_storage.storage import DbFileIO
 
 
 @pytest.mark.django_db(transaction=True)
