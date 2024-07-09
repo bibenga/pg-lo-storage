@@ -46,10 +46,16 @@ class DbFileStorage(Storage, StorageSettingsMixin):
         """The operation is not supported and real name was provided on the save operation"""
         return filename
 
+    def is_valid_name(self, name: str) -> bool:
+        try:
+            loid = self._get_loid(name)
+            return loid != 0
+        except ValueError:
+            return False
+
     def _get_loid(self, name) -> int:
         try:
-            loid = int(pathlib.Path(name).stem)
-            return loid
+            return int(pathlib.Path(name).stem)
         except (ValueError, TypeError) as e:
             raise ValueError(f"the name '{name}' is invalid")
 

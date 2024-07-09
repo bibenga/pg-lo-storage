@@ -10,12 +10,14 @@ from warehouse.storage import DbFileIO, db_file_storage
 
 
 def db_serve(request: HttpRequest, filename: str) -> HttpResponse:
-    content_type, encoding = mimetypes.guess_type(filename)
-    content_type = content_type or "application/octet-stream"
-
     storage = db_file_storage
+    if not storage.is_valid_name(filename):
+        return HttpResponseNotFound()
     if not storage.exists(filename):
         return HttpResponseNotFound()
+
+    content_type, encoding = mimetypes.guess_type(filename)
+    content_type = content_type or "application/octet-stream"
 
     range_header = request.headers.get("Range")
     if range_header:
