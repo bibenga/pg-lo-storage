@@ -13,12 +13,6 @@ The settings:
 * WAREHOUSE_DB_FOR_READ - a database for read files (default is `default`)
 * WAREHOUSE_DB_FOR_WRITE - a database for create and write files (default is `default`)
 
-Some links:
-* https://docs.djangoproject.com/en/5.0/ref/files/storage/
-* https://docs.python.org/3/library/io.html
-* https://www.postgresql.org/docs/16/lo-funcs.html
-* https://www.postgresql.org/docs/current/lo-interfaces.html
-
 ```python
 from django.db import models
 from django.db.models.signals import post_delete, post_init, post_save
