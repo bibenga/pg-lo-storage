@@ -25,13 +25,13 @@ from django.db.models.signals import post_delete, post_init, post_save
 from django.dispatch import receiver
 
 from warehouse.fields import DbFileField
-from warehouse.storage import db_file_storage
+from warehouse.storage import db_file_storage, DbFileStorage
 
 
 class Invoice(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     data = DbFileField(null=True, blank=True)
-    or_just_so = models.FileField(storage=db_file_storage, null=True, blank=True)
+    or_just_so = models.FileField(storage=DbFileStorage("/invoice"), null=True, blank=True)
 
 
 @receiver(post_init, sender=Invoice)
