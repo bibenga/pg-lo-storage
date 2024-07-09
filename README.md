@@ -59,3 +59,17 @@ def invlice_serve(request: HttpRequest, filename: str) -> HttpResponse:
         return HttpResponseForbidden()
     return db_serve(request, filename)
 ```
+
+Work as a file:
+```python
+from django.db import transaction
+from pg_lo_storage.storage import DbFileIO
+
+@transaction.atomic
+def write(loid: int, data: bytes, pos: int) -> int:
+    # DbFileIO work only with transactions
+    with DbFileIO(loid, "wb") as file:
+        file.seek(pos)
+        file.write(data)
+        return file.loid
+```
