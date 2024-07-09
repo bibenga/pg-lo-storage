@@ -8,10 +8,10 @@
 
 name: Upload Python Package
 
-on:
-  release:
-    types: [published]
-# on: [push]
+# on:
+#   release:
+#     types: [published]
+on: [push]
 
 jobs:
   deploy:
@@ -23,10 +23,10 @@ jobs:
       id-token: write
 
     environment:
-      # name: pypi
-      # url: https://pypi.org/p/pg-lo-storage
-      name: testpypi
-      url: https://test.pypi.org/p/pg-lo-storage
+      name: pypi
+      url: https://pypi.org/p/pg-lo-storage
+      # name: testpypi
+      # url: https://test.pypi.org/p/pg-lo-storage
 
     steps:
     - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
       run: python -m build
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
+      # with:
+      #   repository-url: https://test.pypi.org/legacy/
       #    user: __token__
       #    password: ${{ secrets.PYPI_API_TOKEN }}
