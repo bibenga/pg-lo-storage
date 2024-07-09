@@ -8,6 +8,8 @@ from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseNot
 
 from warehouse.storage import DbFileIO, db_file_storage
 
+default_content_type = "application/octet-stream"
+
 
 def db_serve(request: HttpRequest, filename: str) -> HttpResponse:
     storage = db_file_storage
@@ -17,7 +19,7 @@ def db_serve(request: HttpRequest, filename: str) -> HttpResponse:
         return HttpResponseNotFound()
 
     content_type, encoding = mimetypes.guess_type(filename)
-    content_type = content_type or "application/octet-stream"
+    content_type = content_type or default_content_type
 
     range_header = request.headers.get("Range")
     if range_header:

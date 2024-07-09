@@ -1,16 +1,17 @@
 import io
 import os
 import pathlib
+from functools import cached_property
 from types import TracebackType
 from typing import Iterable, Iterator, Self
 from urllib.parse import urljoin
 
 from django.conf import settings
+from django.core.files import File
 from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
-from django.core.files import File
 from django.core.signals import setting_changed
-from django.db import ProgrammingError, connection
+from django.db import ProgrammingError, connections
 from django.utils.deconstruct import deconstructible
 from django.utils.functional import LazyObject
 
@@ -32,11 +33,25 @@ class DefaultDbFileStorage(LazyObject):
 db_file_storage: 'DbFileStorage' = DefaultDbFileStorage()
 
 
+def db_for_read():
+    return getattr(settings, "WAREHOUSE_DB_FOR_READ", "default")
+
+
+def db_for_write():
+    return getattr(settings, "WAREHOUSE_DB_FOR_WRITE", "default")
+
+
 @deconstructible(path="warehouse.storage.DbFileStorage")
 class DbFileStorage(Storage, StorageSettingsMixin):
     def __init__(self, base_url: str | None = None) -> None:
-        self._base_url = base_url or settings.MEDIA_URL
+        self._base_url = base_url
         setting_changed.connect(self._clear_cached_properties)
+
+    @cached_property
+    def base_url(self):
+        if self._base_url is not None and not self._base_url.endswith("/"):
+            self._base_url += "/"
+        return self._value_or_setting(self._base_url, settings.MEDIA_URL)
 
     def generate_filename(self, filename: str) -> str:
         """The operation is not supported and real name was provided on the save operation"""
@@ -77,7 +92,7 @@ class DbFileStorage(Storage, StorageSettingsMixin):
     def delete(self, name: str) -> None:
         loid = self._get_loid(name)
         try:
-            with connection.cursor() as cursor:
+            with connections[db_for_write()].cursor() as cursor:
                 cursor.execute("select lo_unlink(%s)", [int(loid)])
         except ProgrammingError as err:
             if str(err) == f"large object {loid} does not exist":
@@ -86,12 +101,12 @@ class DbFileStorage(Storage, StorageSettingsMixin):
 
     def exists(self, name: str) -> bool:
         loid = self._get_loid(name)
-        with connection.cursor() as cursor:
+        with connections[db_for_read()].cursor() as cursor:
             cursor.execute("select exists(select loid from pg_largeobject where loid=%s)", [loid])
             return cursor.fetchone()[0]
 
     def listdir(self, path: str):
-        raise NotImplementedError()
+        raise PermissionError()
 
     def size(self, name: str) -> int:
         with self._open(name) as f:
@@ -99,9 +114,9 @@ class DbFileStorage(Storage, StorageSettingsMixin):
 
     def url(self, name: str) -> str:
         self._get_loid(name)
-        if self._base_url is None:
+        if self.base_url is None:
             raise ValueError("This file is not accessible via a URL.")
-        return urljoin(self._base_url, name).replace("\\", "/")
+        return urljoin(self.base_url, name).replace("\\", "/")
 
 
 class DbFile(File):
@@ -124,14 +139,17 @@ class DbFileIO(io.IOBase):
             raise ValueError("the text mode is unsuported")
         if "r" in mode and "w" in mode:
             mode = MODE_READWRITE
+            self._using = db_for_write()
         elif "r" in mode:
             mode = MODE_READ
+            self._using = db_for_read()
         elif "w" in mode:
             mode = MODE_WRITE
+            self._using = db_for_write()
         else:
             raise ValueError(f"the mode '{mode}' is invalid")
 
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             if self._loid == 0:
                 cursor.execute("select lo_create(0) as loid")
                 self._loid = cursor.fetchone()[0]
@@ -152,7 +170,7 @@ class DbFileIO(io.IOBase):
 
     @property
     def size(self) -> int:
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             # pos = self.tell()
             cursor.execute("select lo_tell64(%s)", [self._fd])
             pos = cursor.fetchone()[0]
@@ -177,7 +195,6 @@ class DbFileIO(io.IOBase):
 
     # file protocol
     def open(self, mode=None, *args, **kwargs) -> Self:
-        # reopen
         if not self.closed:
             self.close()
 
@@ -185,14 +202,17 @@ class DbFileIO(io.IOBase):
             raise ValueError("the text mode is unsuported")
         if "r" in mode and "w" in mode:
             mode = MODE_READWRITE
+            self._using = db_for_write()
         elif "r" in mode:
             mode = MODE_READ
+            self._using = db_for_read()
         elif "w" in mode:
             mode = MODE_WRITE
+            self._using = db_for_write()
         else:
             raise ValueError(f"the mode '{mode}' is invalid")
 
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
             self._fd = cursor.fetchone()[0]
         return self
@@ -200,7 +220,7 @@ class DbFileIO(io.IOBase):
     def close(self) -> None:
         if not self.closed:
             fd, self._fd = self._fd, None
-            with connection.cursor() as cursor:
+            with connections[self._using].cursor() as cursor:
                 cursor.execute("select lo_close(%s)", [fd])
 
     def __iter__(self) -> Iterator[bytes]:
@@ -278,7 +298,7 @@ class DbFileIO(io.IOBase):
     def read(self, size: int = -1) -> bytes | None:
         if size is None or size < 0:
             return self.readall()
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select loread(%s, %s)", [self._fd, size])
             data = cursor.fetchone()[0]
         if not data:
@@ -354,12 +374,12 @@ class DbFileIO(io.IOBase):
             whence = SEEK_END
         else:
             raise ValueError("the whence is invalid")
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
         return self.tell()
 
     def tell(self) -> int:
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select lo_tell64(%s)", [self._fd])
             pos = cursor.fetchone()[0]
         return pos
@@ -367,7 +387,7 @@ class DbFileIO(io.IOBase):
     def truncate(self, size: int | None = None) -> int:
         if size is None:
             size = self.tell()
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select lo_truncate64(%s, %s)", [self._fd, size])
         return size
 
@@ -375,7 +395,7 @@ class DbFileIO(io.IOBase):
         return "w" in self._mode
 
     def write(self, b: bytes) -> int | None:
-        with connection.cursor() as cursor:
+        with connections[self._using].cursor() as cursor:
             cursor.execute("select lowrite(%s, %s)", [self._fd, b])
         return len(b)
 

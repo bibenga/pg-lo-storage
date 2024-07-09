@@ -12,7 +12,7 @@ class TestLargeObject:
         with transaction.atomic():
             conn = transaction.get_connection()
             with conn.cursor() as cursor:
-                cursor.execute("select loid from pg_largeobject")
+                cursor.execute("select distinct loid from pg_largeobject")
                 loids = [row for row in cursor.fetchall()]
                 print(loids)
                 assert loids == []
