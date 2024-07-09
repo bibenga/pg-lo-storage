@@ -1,6 +1,5 @@
-# warehouse-py
+# Use PostgreSQL large objects for file storage
 
-Use PostgreSQL large objects for file storage.
 This storage is created to store **important files** that belong to a user.
 **It should not be used to store publicly available files or videos.**
 The main benefit is that it works with **transaction** and you can create or delete a file and be confident that the file will still exist if the transaction is rolled back.

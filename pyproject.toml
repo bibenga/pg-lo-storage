@@ -30,8 +30,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bibenga/warehouse-py"
-Issues = "https://github.com/bibenga/warehouse-py/issues"
+Homepage = "https://github.com/bibenga/pg-lo-storage"
+Issues = "https://github.com/bibenga/pg-lo-storage/issues"
 
 [build-system]
 requires = ["setuptools", "setuptools-scm"]

@@ -60,7 +60,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # "warehouse",
     "stable.stall",
 ]
 
