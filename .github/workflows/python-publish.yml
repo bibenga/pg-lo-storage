@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
 
     environment:
-      name: pypi
+      name: release
       url: https://pypi.org/p/pg-lo-storage
 
     steps:
