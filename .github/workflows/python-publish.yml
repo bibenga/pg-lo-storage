@@ -22,8 +22,10 @@ jobs:
       id-token: write
 
     environment:
-      name: pypi
-      url: https://pypi.org/p/pg-lo-storage
+      # name: pypi
+      # url: https://pypi.org/p/pg-lo-storage
+      name: testpypi
+      url: https://test.pypi.org/p/<package-name>
 
     steps:
     - uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
       run: python -m build
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@release/v1
-      # with:
+      with:
+        repository-url: https://test.pypi.org/legacy/
       #    user: __token__
       #    password: ${{ secrets.PYPI_API_TOKEN }}
