@@ -64,7 +64,7 @@ from warehouse.views import db_serve
 
 @login_required
 def large_object_serve(request: HttpRequest, filename: str) -> HttpResponse:
-    if request.user.id != 1:
+    if not Invoice.objects.filter(user=request.user, data=filename).exists():
         return HttpResponseForbidden()
     return db_serve(request, filename)
 ```
