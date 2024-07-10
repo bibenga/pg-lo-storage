@@ -30,7 +30,7 @@ class DefaultDbFileStorage(LazyObject):
         self._wrapped = DbFileStorage()
 
 
-db_file_storage: 'DbFileStorage' = DefaultDbFileStorage()
+db_file_storage: "DbFileStorage" = DefaultDbFileStorage()
 
 
 def db_for_read(alias: str | None = None) -> str:
@@ -133,31 +133,10 @@ class DbFileIO(io.IOBase):
 
     def __init__(self, loid: int, mode: str = "rb", name: str = "", alias: str | None = None) -> None:
         self._loid = loid
-        self._mode = mode
-        self._name = name
-
-        if "t" in mode:
-            raise ValueError("the text mode is unsuported")
-        if "r" in mode and "w" in mode:
-            mode = MODE_READWRITE
-            self._alias = db_for_write(alias)
-        elif "r" in mode:
-            mode = MODE_READ
-            self._alias = db_for_read(alias)
-        elif "w" in mode:
-            mode = MODE_WRITE
-            self._alias = db_for_write(alias)
-        else:
-            raise ValueError(f"the mode '{mode}' is invalid")
-
-        with connections[self._alias].cursor() as cursor:
-            if self._loid == 0:
-                cursor.execute("select lo_create(0) as loid")
-                self._loid = cursor.fetchone()[0]
-                self._name = str(self._loid) + "".join(pathlib.Path(name).suffixes)
-            cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
-            self._fd = cursor.fetchone()[0]
-            # self._name = name or str(self._loid)
+        self._fd: int | None = None
+        self._name: str | None = None
+        self._alias: str | None = None
+        self.open(mode, name=name, alias=alias)
 
     def __str__(self) -> str:
         return self._name or str(self._loid)
@@ -195,27 +174,51 @@ class DbFileIO(io.IOBase):
         self.close()
 
     # file protocol
-    def open(self, mode: str = "rb", alias: str | None = None, *args, **kwargs) -> Self:
+    def open(self, mode: str = "rb", name: str = "", alias: str | None = None) -> Self:
+        """Open or reopen specified object or create it
+
+        Supported the mode matrix is
+        Mode    r	r+	w	w+	a	a+
+        Read    +	+		+		+
+        Write	   	+	+	+	+	+
+        Create   		+	+	+	+
+        Begin   +	+	+	+
+        End	      				+	+
+        """
+
         if not self.closed:
             self.close()
 
-        if "t" in mode:
-            raise ValueError("the text mode is unsuported")
-        if "r" in mode and "w" in mode:
-            mode = MODE_READWRITE
+        if self._loid == 0:
+            if mode not in ("wb", "w+b", "ab", "a+b"):
+                raise ValueError("cannot create file")
+
+        self._mode = mode
+
+        if mode in ("r+b", "w+b", "a+b"):
+            pgmode = MODE_READWRITE
             self._alias = db_for_write(alias)
-        elif "r" in mode:
-            mode = MODE_READ
-            self._alias = db_for_write(alias)
-        elif "w" in mode:
-            mode = MODE_WRITE
+        elif mode in ("rb", "r+b", "w+b", "a+b"):
+            pgmode = MODE_READ
+            self._alias = db_for_read(alias)
+        elif mode in ("wb", "ab"):
+            pgmode = MODE_WRITE
             self._alias = db_for_write(alias)
         else:
-            raise ValueError(f"the mode '{mode}' is invalid")
+            raise ValueError(f"the mode '{mode}' is unsupported")
+        create = self._loid == 0
+        append = mode in ["ab", "a+b"]
 
         with connections[self._alias].cursor() as cursor:
-            cursor.execute("select lo_open(%s, %s)", [self._loid, mode])
+            if self._loid == 0:
+                cursor.execute("select lo_create(0) as loid")
+                self._loid = cursor.fetchone()[0]
+                self._name = str(self._loid) + "".join(pathlib.Path(name).suffixes)
+            cursor.execute("select lo_open(%s, %s)", [self._loid, pgmode])
             self._fd = cursor.fetchone()[0]
+            if append and not create:
+                # self.seek(0, SEEK_END)
+                cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, 0, SEEK_END])
         return self
 
     def close(self) -> None:
@@ -293,23 +296,22 @@ class DbFileIO(io.IOBase):
         return self._name
 
     def readable(self) -> bool:
-        # return "r" in self._mode
-        return True
+        return self._mode in ["rb", "r+b", "w+b", "a+b"]
 
-    def read(self, size: int = -1) -> bytes | None:
+    def read(self, size: int = -1) -> bytes:
         if size is None or size < 0:
             return self.readall()
         with connections[self._alias].cursor() as cursor:
             cursor.execute("select loread(%s, %s)", [self._fd, size])
             data = cursor.fetchone()[0]
         if not data:
-            return None
+            return b""
         return data
 
-    def read1(self, size: int = -1) -> bytes | None:
+    def read1(self, size: int = -1) -> bytes:
         return self.read(size)
 
-    def readall(self) -> bytes | None:
+    def readall(self) -> bytes:
         data = b""
         while True:
             chunk = self.read(self.CHUNK_SIZE)
@@ -328,7 +330,7 @@ class DbFileIO(io.IOBase):
     def readinto1(self, b) -> None:
         self.readinto(b)
 
-    def readline(self, size: int = -1) -> bytes | None:
+    def readline(self, size: int = -1) -> bytes:
         if size == 0:
             return b""
         pos = self.tell()
@@ -347,7 +349,7 @@ class DbFileIO(io.IOBase):
                 if size > 0 and len(line) >= size:
                     break
         if not line:
-            return None
+            return b""
         if size > 0 and len(line) > size:
             line = line[0:size]
         self.seek(pos + len(line), os.SEEK_SET)
@@ -393,7 +395,7 @@ class DbFileIO(io.IOBase):
         return size
 
     def writable(self) -> bool:
-        return "w" in self._mode
+        return self._mode in ["r+b", "wb", "w+b", "a", "a+b"]
 
     def write(self, b: bytes) -> int | None:
         with connections[self._alias].cursor() as cursor:
