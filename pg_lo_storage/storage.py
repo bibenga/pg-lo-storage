@@ -72,14 +72,14 @@ class DbFileStorage(Storage, StorageSettingsMixin):
     def _get_loid(self, name) -> int:
         try:
             return int(pathlib.Path(name).stem)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"the name '{name}' is invalid")
+        except (ValueError, TypeError):
+            raise ValueError(f"the name is incorrect")
 
     def _open(self, name, mode="rb") -> File:
         if "b" not in mode:
-            raise ValueError("the text mode is unsuported")
+            raise ValueError("text mode is not supported")
         if not self.exists(name):
-            raise FileNotFoundError("File does not exist: %s" % name)
+            raise FileNotFoundError("file does not exist: %s" % name)
         loid = self._get_loid(name)
         file = DbFileIO(loid, mode, name, self._alias)
         return DbFile(file, file.name)
@@ -116,7 +116,7 @@ class DbFileStorage(Storage, StorageSettingsMixin):
     def url(self, name: str) -> str:
         self._get_loid(name)
         if self.base_url is None:
-            raise ValueError("This file is not accessible via a URL.")
+            raise ValueError("the file is not available at URL")
         return urljoin(self.base_url, name).replace("\\", "/")
 
 
@@ -129,7 +129,7 @@ class DbFile(File):
 class DbFileIO(io.IOBase):
     # https://docs.python.org/3/library/io.html#class-hierarchy
     CHUNK_SIZE = 65536
-    LINE_SIZE = 64
+    LINE_SIZE = 64  # used in readline
 
     def __init__(self, loid: int, mode: str = "rb", name: str = "", alias: str | None = None) -> None:
         self._loid = loid
@@ -191,7 +191,7 @@ class DbFileIO(io.IOBase):
 
         if self._loid == 0:
             if mode not in ("wb", "w+b", "ab", "a+b"):
-                raise ValueError("cannot create file")
+                raise ValueError("the specified mode does not allow creating a file")
 
         self._mode = mode
 
@@ -205,7 +205,7 @@ class DbFileIO(io.IOBase):
             pgmode = MODE_WRITE
             self._alias = db_for_write(alias)
         else:
-            raise ValueError(f"the mode '{mode}' is unsupported")
+            raise ValueError("the specified mode is not supported")
         create = self._loid == 0
         append = mode in ["ab", "a+b"]
 
@@ -376,7 +376,7 @@ class DbFileIO(io.IOBase):
         elif whence == os.SEEK_END:
             whence = SEEK_END
         else:
-            raise ValueError("the whence is invalid")
+            raise ValueError("the whence is incorrect")
         with connections[self._alias].cursor() as cursor:
             cursor.execute("select lo_lseek64(%s, %s, %s)", [self._fd, offset, whence])
         return self.tell()
