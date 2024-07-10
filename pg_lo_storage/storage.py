@@ -3,7 +3,7 @@ import os
 import pathlib
 from functools import cached_property
 from types import TracebackType
-from typing import Iterable, Iterator, Self
+from typing import Iterator, Self
 from urllib.parse import urljoin
 
 from django.conf import settings
@@ -11,7 +11,7 @@ from django.core.files import File
 from django.core.files.storage import Storage
 from django.core.files.storage.mixins import StorageSettingsMixin
 from django.core.signals import setting_changed
-from django.db import ProgrammingError, connections
+from django.db import ProgrammingError, connections, DEFAULT_DB_ALIAS
 from django.utils.deconstruct import deconstructible
 from django.utils.functional import LazyObject
 
@@ -34,11 +34,11 @@ db_file_storage: "DbFileStorage" = DefaultDbFileStorage()
 
 
 def db_for_read(alias: str | None = None) -> str:
-    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_READ", "default")
+    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_READ", DEFAULT_DB_ALIAS)
 
 
 def db_for_write(alias: str | None = None) -> str:
-    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_WRITE", "default")
+    return alias or getattr(settings, "PG_LO_STORAGE_DB_FOR_WRITE", DEFAULT_DB_ALIAS)
 
 
 @deconstructible(path="pg_lo_storage.storage.DbFileStorage")
@@ -58,9 +58,9 @@ class DbFileStorage(Storage, StorageSettingsMixin):
         """The operation is not supported and real name was provided on the save operation"""
         return filename
 
-    def get_available_name(self, filename: str, max_length=None) -> str:
+    def get_available_name(self, name: str, max_length=None) -> str:
         """The operation is not supported and real name was provided on the save operation"""
-        return filename
+        return name
 
     def is_valid_name(self, name: str) -> bool:
         try:
@@ -84,7 +84,7 @@ class DbFileStorage(Storage, StorageSettingsMixin):
         file = DbFileIO(loid, mode, name, self._alias)
         return DbFile(file, file.name)
 
-    def _save(self, name: str, content: Iterable[bytes]) -> str:
+    def _save(self, name: str, content) -> str:
         with DbFileIO(0, "wb", name, self._alias) as f:
             for chunk in content.chunks():
                 f.write(chunk)
@@ -121,8 +121,8 @@ class DbFileStorage(Storage, StorageSettingsMixin):
 
 
 class DbFile(File):
-    def open(self, mode: str | None = ...) -> Self:
-        self.file.open(mode)
+    def open(self, mode: str | None = None) -> Self:
+        self.file.open(mode or self.mode)
         return self
 
 
@@ -134,7 +134,7 @@ class DbFileIO(io.IOBase):
     def __init__(self, loid: int, mode: str = "rb", name: str = "", alias: str | None = None) -> None:
         self._loid = loid
         self._fd: int | None = None
-        self._name: str | None = None
+        self._name = name
         self._alias: str | None = None
         self.open(mode, name=name, alias=alias)
 
@@ -278,8 +278,8 @@ class DbFileIO(io.IOBase):
     def closed(self) -> bool:
         return self._fd is None
 
-    def fileno(self):
-        return self._fd
+    def fileno(self) -> int:
+        raise OSError("operation not supported")
 
     def flush(self) -> None:
         pass
@@ -292,7 +292,7 @@ class DbFileIO(io.IOBase):
         return self._mode
 
     @property
-    def name(self) -> str | None:
+    def name(self) -> str:
         return self._name
 
     def readable(self) -> bool:
@@ -330,7 +330,7 @@ class DbFileIO(io.IOBase):
     def readinto1(self, b) -> None:
         self.readinto(b)
 
-    def readline(self, size: int = -1) -> bytes:
+    def readline(self, size: int  | None = None) -> bytes:
         if size == 0:
             return b""
         pos = self.tell()
@@ -346,11 +346,11 @@ class DbFileIO(io.IOBase):
             except ValueError:
                 # b"\n" is not found
                 line += chunk
-                if size > 0 and len(line) >= size:
+                if size is not None and size > 0 and len(line) >= size:
                     break
         if not line:
             return b""
-        if size > 0 and len(line) > size:
+        if size is not None and size > 0 and len(line) > size:
             line = line[0:size]
         self.seek(pos + len(line), os.SEEK_SET)
         return line
@@ -402,6 +402,6 @@ class DbFileIO(io.IOBase):
             cursor.execute("select lowrite(%s, %s)", [self._fd, b])
         return len(b)
 
-    def writelines(self, iterable: Iterable[bytes]) -> None:
-        for s in iterable:
-            self.write(s)
+    def writelines(self, lines) -> None:
+        for line in lines:
+            self.write(line)
