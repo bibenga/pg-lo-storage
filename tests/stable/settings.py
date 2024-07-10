@@ -59,8 +59,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
-    "stable.stall",
+    "tests.stable.stall",
 ]
 
 MIDDLEWARE = [
@@ -73,7 +72,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "stable.urls"
+ROOT_URLCONF = "tests.stable.urls"
 
 TEMPLATES = [
     {
@@ -91,7 +90,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "stable.wsgi.application"
+WSGI_APPLICATION = "tests.stable.wsgi.application"
 
 
 # Database
@@ -141,7 +140,6 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 MEDIA_URL = "media/"
-# MEDIA_URL = "media/"
 MEDIA_ROOT= ".django-storage/"
 
 # Default primary key field type
