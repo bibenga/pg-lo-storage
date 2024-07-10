@@ -69,13 +69,13 @@ class DbFileStorage(Storage, StorageSettingsMixin):
         except ValueError:
             return False
 
-    def _get_loid(self, name) -> int:
+    def _get_loid(self, name: str) -> int:
         try:
             return int(pathlib.Path(name).stem)
         except (ValueError, TypeError):
             raise ValueError(f"the name is incorrect")
 
-    def _open(self, name, mode="rb") -> File:
+    def _open(self, name: str, mode: str = "rb") -> File:
         if "b" not in mode:
             raise ValueError("text mode is not supported")
         if not self.exists(name):
@@ -330,7 +330,7 @@ class DbFileIO(io.IOBase):
     def readinto1(self, b) -> None:
         self.readinto(b)
 
-    def readline(self, size: int  | None = None) -> bytes:
+    def readline(self, size: int | None = None) -> bytes:
         if size == 0:
             return b""
         pos = self.tell()
