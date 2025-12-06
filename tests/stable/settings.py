@@ -99,7 +99,7 @@ WSGI_APPLICATION = "tests.stable.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "warehouse",
+        "NAME": "pg_lo_storage",
         "USER": "rds",
         "PASSWORD": "sqlsql",
         "HOST": "host.docker.internal",
@@ -109,12 +109,13 @@ DATABASES = {
         "TIME_ZONE": "UTC"
     }
 }
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "cache_warehouse",
-    }
-}
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+#         "LOCATION": "pg_lo_storage_warehouse",
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
