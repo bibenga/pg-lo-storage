@@ -1,6 +1,6 @@
 [project]
 name = "pg-lo-storage"
-version = "0.1.7"
+version = "0.2.2"
 authors = [
 #  { name="Bibenga", email="" },
 ]
