@@ -109,12 +109,13 @@ DATABASES = {
         "TIME_ZONE": "UTC"
     }
 }
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "pg_lo_storage_warehouse",
-    }
-}
+
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+#         "LOCATION": "pg_lo_storage_warehouse",
+#     }
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
